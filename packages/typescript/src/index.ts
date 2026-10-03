@@ -4,3 +4,6 @@ import { createDocument, type Document } from "@twinlens/transport";
 export function createObservationDocument(revision: string): Document {
   return createDocument(revision);
 }
+
+export { scanProject } from "./scanner.js";
+export type { ScanOptions } from "./scanner.js";

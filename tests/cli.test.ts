@@ -122,7 +122,7 @@ describe("CLI diagnostics and configuration", () => {
   ])("rejects invalid config %s", (config) => {
     failure(["--config", file(config), "import", "fixtures/seed-v1.json"], 2);
   });
-  it("reports scan as unsupported without claiming source analysis", () => {
-    expect(failure(["scan", "src"], 3).code).toBe("UnsupportedCommand");
+  it("reports missing TypeScript configuration without claiming a successful scan", () => {
+    expect(failure(["scan", "src"], 4).code).toBe("AdapterFailed");
   });
 });

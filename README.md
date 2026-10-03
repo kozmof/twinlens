@@ -2,7 +2,7 @@
 
 Twinlens combines Specification Analysis (SA) with Behavioral Telemetry (BT) to expose hidden assumptions through evidence from specifications and code.
 
-Phase 0 provides the Zig semantic core, CLI, stable identity model, and TypeScript transport packages. Source analysis, sensors, TypeSpec lowering, and verification engines are later phases. The seed fixture is synthetic; it is not a self-analysis result.
+Phase 1 provides TypeScript source analysis, static telemetry, indexed Zig queries, snapshots, and historical diffs on top of the Phase 0 IR/CLI. Twinlens can now observe its own TypeScript packages. Zig source analysis, TypeSpec lowering, and verification engines remain later phases.
 
 ## Toolchain
 
@@ -36,6 +36,18 @@ pnpm test:integration
 
 If a managed environment supplies an unwritable temporary directory, use `TMPDIR=/tmp pnpm check`. To discard stale TypeScript incremental diagnostics after a toolchain/configuration change, use `pnpm exec tsc -b --force`.
 
+## Scan a project
+
+```sh
+./zig-out/bin/twinlens scan tsconfig.json --project twinlens --out baseline.json
+./zig-out/bin/twinlens query baseline.json --symbol scanProject --metric function.args.count
+./zig-out/bin/twinlens query baseline.json --relations --relation calls
+./zig-out/bin/twinlens diff baseline.json baseline.json
+pnpm self:observe
+```
+
+See [Phase 1](docs/phase1.md) for sensor definitions, snapshot formats, file updates, and analysis limits. The source adapter uses the TypeScript 6.0.3 compiler API; TypeScript 7.0.2 remains the build compiler.
+
 ## Try the seed boundary
 
 ```sh
@@ -51,42 +63,44 @@ zig build run -- --help
 ./zig-out/bin/twinlens --config twinlens.example.json import fixtures/seed-v1.json
 ```
 
-Configuration is loaded only when `--config FILE` precedes the command. Its `max_input_bytes` defaults to 16 MiB and must be between 1 byte and 256 MiB. Configuration files are limited to 64 KiB. File paths are interpreted relative to the working directory. Transport source paths use a separate project-relative convention described in [IR v1](docs/ir-v1.md).
+Configuration is loaded only when `--config FILE` precedes the command. Its `max_input_bytes` defaults to 16 MiB and must be between 1 byte and 256 MiB. The optional `typescript_adapter` setting locates the built adapter (default: `packages/typescript/dist/cli.js`). Configuration files are limited to 64 KiB. File paths are interpreted relative to the working directory. Transport source paths use a separate project-relative convention described in [IR v1](docs/ir-v1.md).
 
 ## CLI contract
 
-| Command                                     | Standard output                                                            |
-| ------------------------------------------- | -------------------------------------------------------------------------- |
-| `import FILE`                               | Validated IR v1 JSON document, preserving array order                      |
-| `query FILE [--subject ID] [--metric NAME]` | JSON object with `schema_version`, `revision`, and matching `observations` |
-| `scan PATH`                                 | No output; unsupported-command diagnostic until Phase 1                    |
-| `--help`, `--version`                       | Human-readable text                                                        |
+| Command                                                       | Standard output                                                            |
+| ------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `import FILE`                                                 | Validated IR v1 JSON document, preserving array order                      |
+| `query FILE [--subject ID] [--metric NAME]`                   | JSON object with `schema_version`, `revision`, and matching `observations` |
+| `scan TSCONFIG [--project NAME] [--revision ID] [--out FILE]` | Snapshot JSON, or atomically write a snapshot                              |
+| `diff BEFORE AFTER [--out FILE]`                              | Snapshot differences as JSON                                               |
+| `update BASE REPLACEMENT --file PATH [--out FILE]`            | Updated IR; invalidated aggregates become unknown                          |
+| `--help`, `--version`                                         | Human-readable text                                                        |
 
 Failures emit one JSON object to stderr with `code`, `message`, and `path` (nullable), and no successful result on stdout. Query with no matches succeeds with an empty list. A missing observation is not interpreted as a zero or as a failed measurement.
 
-| Exit | Meaning                                                                 |
-| ---- | ----------------------------------------------------------------------- |
-| 0    | Success                                                                 |
-| 1    | Internal/allocation/output failure                                      |
-| 2    | Invalid arguments or config contents                                    |
-| 3    | Unsupported command/capability                                          |
-| 4    | Input/config I/O failure or input limit exceeded                        |
-| 5    | Invalid IR, unsupported schema, or failed reference/identity validation |
+| Exit | Meaning                                                                   |
+| ---- | ------------------------------------------------------------------------- |
+| 0    | Success                                                                   |
+| 1    | Internal/allocation/output failure                                        |
+| 2    | Invalid arguments or config contents                                      |
+| 3    | Unsupported command/capability                                            |
+| 4    | Input/config/output I/O failure, adapter failure, or input limit exceeded |
+| 5    | Invalid IR, unsupported schema, or failed reference/identity validation   |
 
 ## Architecture
 
 Zig defines Twinlens semantics. TypeScript provides permanent compiler ecosystem integration. Both frontends exchange language-independent records with the core; compiler AST objects cannot cross the transport boundary.
 
-| Location                | Responsibility                                                                                   |
-| ----------------------- | ------------------------------------------------------------------------------------------------ |
-| `src/core/`             | Typed IDs, IR, strict decoding, validation, owned document store, basic query                    |
-| `src/main.zig`          | CLI, config, I/O, diagnostics                                                                    |
-| `packages/transport/`   | TypeScript wire types, identity encoding, structural validation, JSON encoding                   |
-| `packages/typescript/`  | Package boundary for the Phase 1 compiler adapter; currently creates empty observation documents |
-| `packages/typespec/`    | Package boundary for later TypeSpec lowering; currently creates empty specification documents    |
-| `fixtures/`, `scripts/` | Reproducible synthetic seed document and invalid-case generators                                 |
-| `tests/`                | Transport conformance, integration, and dependency-boundary checks                               |
+| Location                | Responsibility                                                                                |
+| ----------------------- | --------------------------------------------------------------------------------------------- |
+| `src/core/`             | Typed IDs, IR/snapshot validation, indexed store, queries, file replacement, diff             |
+| `src/main.zig`          | CLI, config, adapter orchestration, I/O, diagnostics                                          |
+| `packages/transport/`   | TypeScript IR/snapshot types, identity encoding, structural validation, JSON encoding         |
+| `packages/typescript/`  | Compiler project loading, source extraction, static sensors, snapshot production              |
+| `packages/typespec/`    | Package boundary for later TypeSpec lowering; currently creates empty specification documents |
+| `fixtures/`, `scripts/` | Reproducible synthetic seed document and invalid-case generators                              |
+| `tests/`                | Transport conformance, integration, and dependency-boundary checks                            |
 
-The transport package depends on neither frontend. Frontends depend only on transport for shared records. The Zig core imports only its own modules and the standard library. The seed store owns a single validated document; persistent storage, indexes, snapshots, and incremental updates belong to Phase 1.
+The transport package depends on neither frontend. Frontends depend only on transport for shared records. The Zig core imports only its own modules and the standard library. The core owns indexed validated records; snapshots persist as explicit JSON files. Partial file replacement invalidates dependent aggregates. Automatic incremental scanning and historical constraint verification remain later work.
 
 See [IR v1](docs/ir-v1.md) for the wire contract and identity rules. Project planning documents and the working checklist currently live in the locally ignored `tmp/` directory.

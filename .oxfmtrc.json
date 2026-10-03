@@ -10,6 +10,7 @@
     ".zig-global-cache/**",
     "zig-out/**",
     "packages/*/dist/**",
-    "pnpm-lock.yaml"
+    "pnpm-lock.yaml",
+    ".twinlens/**"
   ]
 }

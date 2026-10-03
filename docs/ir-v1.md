@@ -96,6 +96,6 @@ Resolved targets must exist in the same document. Unresolved targets require a r
 
 `Store.decode` owns its parsed records and strings independently of the input buffer. Validation finishes before the store is returned. `Store.deinit` releases the document. Query results own their outer slice but borrow record strings from the store and must not outlive it. Encoding produces a complete IR document; CLI query output is a projection and is not itself an importable document.
 
-Imports do not merge documents or mutate files. Validation uses temporary identity/reference maps; the Phase 0 store exposes centralized typed record collections and a linear observation query. Persistent indexes, updates, snapshots, and historical diffing are later work.
+Imports do not merge documents or mutate files. The Phase 1 store adds owned indexes and explicit file replacement. The IR v1 wire schema remains unchanged. See [Phase 1](phase1.md) for snapshot envelopes, query filters, partial-update invalidation, and revision-aware diff semantics.
 
 The fixture generator exercises same-name subjects in separate files, Unicode identity input, source spans, measured zero, unknown/unsupported values, and resolved/unresolved calls. Integration tests check both-language rejection of malformed records, unsupported versions, duplicate IDs, identity mismatches, and dangling references.

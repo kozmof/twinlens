@@ -14,6 +14,7 @@
     "typecheck": "tsc -b --force"
   },
   "dependencies": {
-    "@twinlens/transport": "workspace:*"
+    "@twinlens/transport": "workspace:*",
+    "typescript-api": "npm:typescript@6.0.3"
   }
 }

@@ -277,3 +277,6 @@ export function encodeDocument(value: Document): string {
   validateDocument(value);
   return JSON.stringify(value, null, 2) + "\n";
 }
+
+export { encodeSnapshot, validateSnapshot } from "./snapshot.js";
+export type { Snapshot, FileDigest, CompilerDiagnostic } from "./snapshot.js";
