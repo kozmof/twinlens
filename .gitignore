@@ -2,5 +2,7 @@
 .npm-cache
 .pnpm-store
 
+.codex
+
 node_modules/
 tmp/
