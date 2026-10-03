@@ -1,0 +1,8 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/transport" },
+    { "path": "packages/typescript" },
+    { "path": "packages/typespec" }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "ignorePatterns": [
+    "tmp/**",
+    ".devcontainer/**",
+    ".codex/**",
+    "node_modules/**",
+    ".pnpm-store/**",
+    ".npm-cache/**",
+    ".zig-cache/**",
+    ".zig-global-cache/**",
+    "zig-out/**",
+    "packages/*/dist/**",
+    "pnpm-lock.yaml"
+  ]
+}

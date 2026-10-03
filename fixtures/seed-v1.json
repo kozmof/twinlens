@@ -1,0 +1,169 @@
+{
+  "schema_version": 1,
+  "revision": "fixture-r1",
+  "subjects": [
+    {
+      "id": "sub_b2a83b9e03a765821796f9f0ae83ab3b20c02f7b1c00719a35c4abd3dbc5f017",
+      "key": {
+        "project": "twinlens-seed",
+        "language": "typescript",
+        "path": "src/scanner.ts",
+        "kind": "function",
+        "name": "scan",
+        "discriminator": "declaration:0"
+      },
+      "source": {
+        "path": "src/scanner.ts",
+        "language": "typescript",
+        "span": {
+          "start": 0,
+          "end": 80
+        },
+        "producer": "seed-fixture/1",
+        "confidence": "high"
+      }
+    },
+    {
+      "id": "sub_ef8f943e0deb12b80ba9cdaf63c440307bd8d13334cadc013e616478f9f61946",
+      "key": {
+        "project": "twinlens-seed",
+        "language": "typescript",
+        "path": "src/café.ts",
+        "kind": "function",
+        "name": "scan",
+        "discriminator": "declaration:0"
+      },
+      "source": {
+        "path": "src/café.ts",
+        "language": "typescript",
+        "span": {
+          "start": 100,
+          "end": 180
+        },
+        "producer": "seed-fixture/1",
+        "confidence": "high"
+      }
+    }
+  ],
+  "symbols": [
+    {
+      "id": "sym_b8aa4c33391973683cc4d0caa3d0b1b44e3a7732444f32e952bfcb8b69a6c493",
+      "subject": "sub_b2a83b9e03a765821796f9f0ae83ab3b20c02f7b1c00719a35c4abd3dbc5f017",
+      "name": "scan"
+    },
+    {
+      "id": "sym_7450e3b495756b882470f6195edfdda5627c2b03f7118d48f89d89a862edb340",
+      "subject": "sub_ef8f943e0deb12b80ba9cdaf63c440307bd8d13334cadc013e616478f9f61946",
+      "name": "scan"
+    }
+  ],
+  "observations": [
+    {
+      "id": "obs_e3b6d72c1420e340e1bea273bd936feea974a28552314d860866d38dc8381fb0",
+      "subject": "sub_b2a83b9e03a765821796f9f0ae83ab3b20c02f7b1c00719a35c4abd3dbc5f017",
+      "metric": "function.args.count",
+      "measurement": {
+        "status": "measured",
+        "value": 0,
+        "reason": null
+      },
+      "source": {
+        "path": "src/scanner.ts",
+        "language": "typescript",
+        "span": {
+          "start": 0,
+          "end": 80
+        },
+        "producer": "seed-fixture/1",
+        "confidence": "high"
+      },
+      "revision": "fixture-r1"
+    },
+    {
+      "id": "obs_e199a1e19430e248425d0c74c499fc922ab8e2fd9b00b4007d7f1049d1537a88",
+      "subject": "sub_b2a83b9e03a765821796f9f0ae83ab3b20c02f7b1c00719a35c4abd3dbc5f017",
+      "metric": "function.branch.count",
+      "measurement": {
+        "status": "unknown",
+        "value": null,
+        "reason": "body not observed"
+      },
+      "source": {
+        "path": "src/scanner.ts",
+        "language": "typescript",
+        "span": {
+          "start": 0,
+          "end": 80
+        },
+        "producer": "seed-fixture/1",
+        "confidence": "high"
+      },
+      "revision": "fixture-r1"
+    },
+    {
+      "id": "obs_61fb5ab8277ed2ab7135b5543bda211d2297e4c983e7cb8d0906ef89127ce92d",
+      "subject": "sub_b2a83b9e03a765821796f9f0ae83ab3b20c02f7b1c00719a35c4abd3dbc5f017",
+      "metric": "value.write_count",
+      "measurement": {
+        "status": "unsupported",
+        "value": null,
+        "reason": "sensor not implemented"
+      },
+      "source": {
+        "path": "src/scanner.ts",
+        "language": "typescript",
+        "span": {
+          "start": 0,
+          "end": 80
+        },
+        "producer": "seed-fixture/1",
+        "confidence": "high"
+      },
+      "revision": "fixture-r1"
+    }
+  ],
+  "relations": [
+    {
+      "id": "rel_864948da2e66dc1aac186eacd6b2c3200141123de93e2c2daf4c5604765b839f",
+      "from": "sub_b2a83b9e03a765821796f9f0ae83ab3b20c02f7b1c00719a35c4abd3dbc5f017",
+      "kind": "calls",
+      "target": {
+        "status": "resolved",
+        "subject": "sub_ef8f943e0deb12b80ba9cdaf63c440307bd8d13334cadc013e616478f9f61946",
+        "reason": null
+      },
+      "source": {
+        "path": "src/scanner.ts",
+        "language": "typescript",
+        "span": {
+          "start": 0,
+          "end": 80
+        },
+        "producer": "seed-fixture/1",
+        "confidence": "high"
+      },
+      "revision": "fixture-r1"
+    },
+    {
+      "id": "rel_721e8ab0dc12446702e0ecda960a3a99f2c35a821231eae63ff3e4a874499837",
+      "from": "sub_b2a83b9e03a765821796f9f0ae83ab3b20c02f7b1c00719a35c4abd3dbc5f017",
+      "kind": "calls",
+      "target": {
+        "status": "unresolved",
+        "subject": null,
+        "reason": "dynamic call target"
+      },
+      "source": {
+        "path": "src/scanner.ts",
+        "language": "typescript",
+        "span": {
+          "start": 0,
+          "end": 80
+        },
+        "producer": "seed-fixture/1",
+        "confidence": "high"
+      },
+      "revision": "fixture-r1"
+    }
+  ]
+}

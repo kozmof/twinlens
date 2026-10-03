@@ -1,23 +1,35 @@
 {
-  "name": "workspace",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
-    "test": "vitest",
-    "lint": "oxlint",
-    "lint:fix": "oxlint --fix",
-    "fmt": "oxfmt",
-    "fmt:check": "oxfmt --check"
-  },
-  "keywords": [],
-  "author": "",
+  "name": "twinlens",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Specification analysis and behavioral telemetry",
   "license": "MIT",
-  "packageManager": "pnpm@10.17.1",
+  "type": "module",
+  "scripts": {
+    "build": "pnpm build:ts && zig build",
+    "build:ts": "tsc -b",
+    "typecheck": "tsc -b --force",
+    "test": "pnpm build && zig build test && vitest run",
+    "test:ts": "pnpm build:ts && vitest run tests/transport.test.ts tests/boundaries.test.ts",
+    "test:integration": "pnpm build && vitest run tests/cli.test.ts",
+    "check": "pnpm fmt:check && pnpm lint && pnpm typecheck && pnpm test",
+    "fixture": "pnpm build:ts && node scripts/generate-fixture.mjs",
+    "lint": "oxlint packages tests scripts",
+    "lint:fix": "oxlint --fix packages tests scripts",
+    "fmt": "node scripts/format.mjs && zig fmt build.zig src",
+    "fmt:check": "node scripts/format.mjs --check && zig fmt --check build.zig src"
+  },
   "devDependencies": {
+    "@types/node": "26.6.3",
     "@typespec/compiler": "^1.16.0",
     "oxfmt": "^0.70.0",
     "oxlint": "^1.85.0",
+    "typescript": "7.0.2",
     "vitest": "^5.0.2"
-  }
+  },
+  "engines": {
+    "node": ">=26.10.0 <27",
+    "pnpm": "10.17.1"
+  },
+  "packageManager": "pnpm@10.17.1"
 }

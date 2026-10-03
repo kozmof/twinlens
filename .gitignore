@@ -6,3 +6,10 @@
 
 node_modules/
 tmp/
+
+.zig-cache/
+.zig-global-cache/
+zig-out/
+packages/*/dist/
+coverage/
+.pnpm-data/
