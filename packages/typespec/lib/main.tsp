@@ -1,0 +1,14 @@
+import "../dist/decorators.js";
+using TypeSpec.Reflection;
+namespace Twinlens;
+extern dec claim(target: unknown, kind: valueof string, name: valueof string, expression: valueof string);
+extern dec require(target: unknown, name: valueof string, expression: valueof string);
+extern dec ensure(target: unknown, name: valueof string, expression: valueof string);
+extern dec invariant(target: unknown, name: valueof string, expression: valueof string);
+extern dec forbid(target: unknown, name: valueof string, expression: valueof string);
+extern dec policy(target: unknown, name: valueof string, expression: valueof string);
+extern dec status(target: unknown, state: valueof string, reason: valueof string);
+extern dec relation(target: unknown, kind: valueof string, destination: unknown);
+extern dec semantics(target: Operation, mode: valueof string, definition?: valueof string);
+extern dec derived(target: Operation, backing: Operation);
+extern dec domain(target: unknown, definition: valueof string);

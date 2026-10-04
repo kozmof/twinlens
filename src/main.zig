@@ -15,13 +15,18 @@ const help =
     \\  diff BEFORE AFTER [--out FILE]       Compare two snapshots
     \\  update BASE REPLACEMENT --file PATH [--out FILE]
     \\                                      Replace/remove one file in IR; emit new IR
+    \\  inspect ROOT SNAPSHOT [--out FILE]    Collect bounded structural evidence
+    \\  compile TYPESPEC [--project NAME] [--revision ID] [--out FILE]
+    \\                                      Lower TypeSpec to specification IR
+    \\  evaluate SPECIFICATION EVIDENCE [--out FILE]
+    \\                                      Evaluate claims without executing user code
     \\  analyze SNAPSHOT [--previous REPORT] [--out FILE]
     \\                                      Generate evidence, hypotheses and caller scores
     \\  review REPORT --finding ID --status STATE --note TEXT [--out FILE]
     \\                                      Record a finding review decision
     \\  --help                              Show this help
     \\  --version                           Show version
-    \\Config: max_input_bytes (16 MiB), typescript_adapter (packages/typescript/dist/cli.js).
+    \\Config: max_input_bytes (16 MiB), typescript_adapter, typespec_adapter (built package CLI paths).
     \\Paths are relative to cwd. Query/update source paths are project-relative.
     \\Exit: 0 success, 1 internal, 2 usage/config, 3 unsupported, 4 I/O/adapter, 5 invalid IR.
     \\
@@ -29,9 +34,10 @@ const help =
 const Config = struct {
     max_input_bytes: u32 = 16 * 1024 * 1024,
     typescript_adapter: []const u8 = "packages/typescript/dist/cli.js",
+    typespec_adapter: []const u8 = "packages/typespec/dist/cli.js",
 };
 const Options = struct {
-    command: enum { help, version, import, query, scan, diff, update, analyze, review },
+    command: enum { help, version, import, query, scan, diff, update, analyze, review, compile, evaluate, inspect },
     path: ?[]const u8 = null,
     second: ?[]const u8 = null,
     config: ?[]const u8 = null,
@@ -69,7 +75,7 @@ fn parseArgs(args: []const []const u8) !Options {
     if (i == args.len or std.mem.startsWith(u8, args[i], "--")) return error.ExpectedInputPath;
     options.path = args[i];
     i += 1;
-    if (command == .diff or command == .update) {
+    if (command == .diff or command == .update or command == .evaluate or command == .inspect) {
         if (i == args.len or std.mem.startsWith(u8, args[i], "--")) return error.ExpectedSecondPath;
         options.second = args[i];
         i += 1;
@@ -85,7 +91,7 @@ fn parseArgs(args: []const []const u8) !Options {
         const value = args[i];
         i += 1;
         if (!core.ir.nonempty(value)) return error.EmptyOptionValue;
-        if ((command == .scan or command == .diff or command == .update or command == .analyze or command == .review) and std.mem.eql(u8, option, "--out") and options.out == null) {
+        if ((command == .scan or command == .diff or command == .update or command == .analyze or command == .review or command == .compile or command == .evaluate or command == .inspect) and std.mem.eql(u8, option, "--out") and options.out == null) {
             options.out = value;
             continue;
         }
@@ -93,7 +99,7 @@ fn parseArgs(args: []const []const u8) !Options {
             options.language = std.meta.stringToEnum(@typeInfo(@FieldType(Options, "language")).optional.child, value) orelse return error.InvalidLanguage;
             continue;
         }
-        if (command == .scan and std.mem.eql(u8, option, "--project") and options.project == null) {
+        if ((command == .scan or command == .compile) and std.mem.eql(u8, option, "--project") and options.project == null) {
             options.project = value;
             continue;
         }
@@ -102,7 +108,7 @@ fn parseArgs(args: []const []const u8) !Options {
             options.file = value;
             continue;
         }
-        if ((command == .scan or command == .query) and std.mem.eql(u8, option, "--revision") and options.filter.revision == null) {
+        if ((command == .scan or command == .query or command == .compile) and std.mem.eql(u8, option, "--revision") and options.filter.revision == null) {
             options.filter.revision = value;
             continue;
         }
@@ -188,10 +194,10 @@ fn run(init: std.process.Init) !u8 {
         if (shape.value == .object) if (shape.value.object.get("max_input_bytes")) |limit| {
             if (limit != .integer and limit != .float) return diagnostic(init, 2, "InvalidInputLimit", "max_input_bytes must be a JSON number.", path);
         };
-        const parsed = std.json.parseFromSlice(Config, allocator, bytes, .{ .allocate = .alloc_always }) catch |err| return diagnostic(init, 2, @errorName(err), "Invalid config; expected max_input_bytes and/or typescript_adapter.", path);
+        const parsed = std.json.parseFromSlice(Config, allocator, bytes, .{ .allocate = .alloc_always }) catch |err| return diagnostic(init, 2, @errorName(err), "Invalid config; expected max_input_bytes, typescript_adapter, or typespec_adapter.", path);
         // Config strings live in the process arena through command execution.
         config = parsed.value;
-        if (config.max_input_bytes == 0 or config.max_input_bytes > 256 * 1024 * 1024 or !core.ir.nonempty(config.typescript_adapter)) return diagnostic(init, 2, "InvalidConfig", "max_input_bytes must be 1..268435456 and typescript_adapter must be nonempty.", path);
+        if (config.max_input_bytes == 0 or config.max_input_bytes > 256 * 1024 * 1024 or !core.ir.nonempty(config.typescript_adapter) or !core.ir.nonempty(config.typespec_adapter)) return diagnostic(init, 2, "InvalidConfig", "max_input_bytes must be 1..268435456 and adapter paths must be nonempty.", path);
     }
     switch (options.command) {
         .help => try std.Io.File.stdout().writeStreamingAll(init.io, help),
@@ -219,6 +225,35 @@ fn run(init: std.process.Init) !u8 {
                 return emit(init, combined, options.out);
             }
             return emit(init, snapshot.value, options.out);
+        },
+        .inspect => {
+            const bytes = read(init, options.second.?, config) catch |err| return diagnostic(init, 4, @errorName(err), "Cannot read structural snapshot.", options.second);
+            const snapshot = core.snapshot.decode(allocator, bytes) catch |err| return diagnostic(init, 5, @errorName(err), "Invalid structural snapshot.", options.second);
+            defer snapshot.deinit();
+            const input = zig_adapter.inspect(allocator, init.io, options.path.?, snapshot.value.project, snapshot.value.document, config.max_input_bytes) catch |err| return diagnostic(init, 4, @errorName(err), "Cannot inspect core source.", options.path);
+            return emit(init, input, options.out);
+        },
+        .compile => {
+            var argv: std.ArrayList([]const u8) = .empty;
+            try argv.appendSlice(allocator, &.{ "node", config.typespec_adapter, options.path.? });
+            if (options.project) |project| try argv.appendSlice(allocator, &.{ "--project", project });
+            if (options.filter.revision) |revision| try argv.appendSlice(allocator, &.{ "--revision", revision });
+            const result = std.process.run(allocator, init.io, .{ .argv = argv.items, .expand_arg0 = .expand, .stdout_limit = .limited(config.max_input_bytes), .stderr_limit = .limited(64 * 1024) }) catch |err| return diagnostic(init, 4, @errorName(err), "Cannot run TypeSpec compiler adapter.", options.path);
+            if (result.term != .exited or result.term.exited != 0) return diagnostic(init, 4, "AdapterFailed", if (result.stderr.len > 0) result.stderr else "TypeSpec adapter failed.", options.path);
+            const specification = core.specification.decode(allocator, result.stdout) catch |err| return diagnostic(init, 5, @errorName(err), "TypeSpec adapter emitted an invalid specification.", options.path);
+            defer specification.deinit();
+            return emit(init, specification.value, options.out);
+        },
+        .evaluate => {
+            const spec_bytes = read(init, options.path.?, config) catch |err| return diagnostic(init, 4, @errorName(err), "Cannot read specification.", options.path);
+            const input_bytes = read(init, options.second.?, config) catch |err| return diagnostic(init, 4, @errorName(err), "Cannot read evaluation evidence.", options.second);
+            const spec = core.specification.decode(allocator, spec_bytes) catch |err| return diagnostic(init, 5, @errorName(err), "Invalid specification.", options.path);
+            defer spec.deinit();
+            const input = core.specification.decodeInput(allocator, input_bytes) catch |err| return diagnostic(init, 5, @errorName(err), "Invalid evaluation evidence.", options.second);
+            defer input.deinit();
+            var result = core.specification.evaluate(allocator, spec.value, input.value) catch |err| return diagnostic(init, 5, @errorName(err), "Cannot evaluate specification.", options.path);
+            defer result.deinit();
+            return emit(init, result.report, options.out);
         },
         .analyze => {
             const bytes = read(init, options.path.?, config) catch |err| return diagnostic(init, 4, @errorName(err), "Cannot read snapshot.", options.path);

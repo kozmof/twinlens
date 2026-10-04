@@ -26,3 +26,4 @@ jobs:
       - run: pnpm self:observe
       - run: pnpm self:observe:all
       - run: pnpm self:analyze
+      - run: pnpm self:verify

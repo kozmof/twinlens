@@ -596,3 +596,107 @@ pub fn scan(gpa: std.mem.Allocator, io: std.Io, input: []const u8, project: ?[]c
     try core.snapshot.validate(a, value);
     return .{ .arena = arena, .value = value };
 }
+
+fn jsonShape(comptime T: type) bool {
+    return switch (@typeInfo(T)) {
+        .int, .float, .@"enum" => true,
+        .pointer => |p| p.size == .slice and jsonShape(p.child),
+        .optional => |o| jsonShape(o.child),
+        .@"struct" => |s| blk: {
+            inline for (s.fields) |f| if (!jsonShape(f.type)) break :blk false;
+            break :blk true;
+        },
+        else => false,
+    };
+}
+/// Bounded source inspection. Unrecognized Store shapes cannot establish AST absence.
+pub fn inspect(a: std.mem.Allocator, io: std.Io, root: []const u8, project: []const u8, graph: ?ir.Document, max_bytes: u32) !core.specification.Input {
+    var paths: std.ArrayList([]const u8) = .empty;
+    try collect(a, io, root, "src/core", &paths);
+    std.mem.sort([]const u8, paths.items, {}, struct {
+        fn less(_: void, l: []const u8, r: []const u8) bool {
+            return std.mem.lessThan(u8, l, r);
+        }
+    }.less);
+    if (paths.items.len == 0) return error.NoCoreSources;
+    var boundary_bad = false;
+    var incomplete = false;
+    var store_bad = false;
+    var store_seen: u32 = 0;
+    var store_supported = false;
+    var ir_current = false;
+    var index_current = false;
+    var store_current = false;
+    var boundary_source: ir.Source = .{ .path = paths.items[0], .language = "zig", .span = .{ .start = 0, .end = 0 }, .producer = "zig-structure/1", .confidence = .medium };
+    var store_source = boundary_source;
+    for (paths.items) |path| {
+        const bytes = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(a, &.{ root, path }), a, .limited(max_bytes));
+        if (eq(path, "src/core/store.zig")) store_current = eq(bytes, core.store_source);
+        if (eq(path, "src/core/ir.zig")) ir_current = eq(bytes, core.ir_source);
+        if (eq(path, "src/core/index.zig")) index_current = eq(bytes, core.index_source);
+        var tree = try Ast.parse(a, try a.dupeZ(u8, bytes), .zig);
+        defer tree.deinit(a);
+        if (tree.errors.len != 0) {
+            incomplete = true;
+            continue;
+        }
+        for (1..tree.nodes.len) |i| {
+            const n: Node = @enumFromInt(i);
+            const last = tree.lastToken(n);
+            const origin: ir.Source = .{ .path = path, .language = "zig", .span = .{ .start = tree.tokenStart(tree.firstToken(n)), .end = tree.tokenStart(last) + @as(u32, @intCast(tree.tokenSlice(last).len)) }, .producer = "zig-structure/1", .confidence = .medium };
+            var b: [2]Node = undefined;
+            if (tree.builtinCallParams(&b, n)) |params| if (eq(tree.tokenSlice(tree.nodeMainToken(n)), "@import")) {
+                if (params.len != 1 or tree.nodeTag(params[0]) != .string_literal) {
+                    incomplete = true;
+                    continue;
+                }
+                const target = std.zig.string_literal.parseAlloc(a, tree.tokenSlice(tree.nodeMainToken(params[0]))) catch {
+                    incomplete = true;
+                    continue;
+                };
+                if (eq(target, "std")) continue;
+                const resolved = try std.fs.path.resolve(a, &.{ "/project", std.fs.path.dirname(path).?, target });
+                var present = false;
+                if (std.mem.startsWith(u8, resolved, "/project/src/core/")) for (paths.items) |candidate| if (eq(candidate, resolved[9..])) {
+                    present = true;
+                    break;
+                };
+                if (!std.mem.endsWith(u8, target, ".zig") or !present) {
+                    boundary_bad = true;
+                    boundary_source = origin;
+                }
+            };
+            if (eq(path, "src/core/store.zig")) if (tree.fullVarDecl(n)) |v| if (eq(tree.tokenSlice(v.ast.mut_token + 1), "Store")) {
+                store_seen += 1;
+                store_source = origin;
+                const init = v.ast.init_node.unwrap() orelse continue;
+                const container = tree.fullContainerDecl(&b, init) orelse continue;
+                var fields: u32 = 0;
+                var supported = true;
+                for (container.ast.members) |member| if (tree.fullContainerField(member)) |f| {
+                    fields += 1;
+                    const ty = f.ast.type_expr.unwrap() orelse {
+                        supported = false;
+                        continue;
+                    };
+                    const raw = tree.getNodeSource(ty);
+                    var compact: std.ArrayList(u8) = .empty;
+                    for (raw) |c| if (!std.ascii.isWhitespace(c)) {
+                        try compact.append(a, c);
+                    };
+                    const name = tree.tokenSlice(f.ast.main_token);
+                    const expected: []const u8 = if (eq(name, "parsed")) "std.json.Parsed(ir.Document)" else if (eq(name, "allocator")) "std.mem.Allocator" else if (eq(name, "index")) "Index" else "";
+                    if (!eq(compact.items, expected)) supported = false;
+                    if (std.mem.indexOf(u8, raw, "Ast") != null or std.mem.indexOf(u8, raw, ".Node") != null or eq(raw, "Node")) store_bad = true;
+                };
+                store_supported = supported and fields == 3;
+            };
+        }
+    }
+    const boundary_status: @FieldType(core.specification.Fact, "status") = if (boundary_bad or !incomplete) .known else .unknown;
+    const store_status: @FieldType(core.specification.Fact, "status") = if (store_bad or (store_seen == 1 and store_supported and store_current and ir_current and index_current and !incomplete)) .known else .unknown;
+    const facts = try a.alloc(core.specification.Fact, 2);
+    facts[0] = .{ .name = "core.dependencies.valid", .status = boundary_status, .value = if (boundary_status == .known) .{ .kind = .boolean, .value = if (boundary_bad) "false" else "true" } else null, .reason = if (boundary_status == .known) null else "Core source has syntax errors or nonliteral imports; dependency inventory is incomplete", .source = boundary_source, .origin = .code };
+    facts[1] = .{ .name = "store.ast_free", .status = store_status, .value = if (store_status == .known) .{ .kind = .boolean, .value = if (store_bad or !jsonShape(ir.Document) or @FieldType(core.Store, "parsed") != std.json.Parsed(ir.Document)) "false" else "true" } else null, .reason = if (store_status == .known) null else "Store fields or IR/index source differ from the supported compiled shape; AST absence is unproven", .source = store_source, .origin = .code };
+    return .{ .input_version = 1, .project = project, .facts = facts, .graph = graph, .coverage = if (graph != null) .complete else .absent };
+}

@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": {
+      "typespec": "./lib/main.tsp",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     }
@@ -14,6 +15,8 @@
     "typecheck": "tsc -b --force"
   },
   "dependencies": {
-    "@twinlens/transport": "workspace:*"
-  }
+    "@twinlens/transport": "workspace:*",
+    "@typespec/compiler": "1.16.0"
+  },
+  "tspMain": "lib/main.tsp"
 }

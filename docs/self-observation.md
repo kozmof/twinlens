@@ -57,3 +57,11 @@ The justified change extracts `normalizeOptionValue` for direct testing. The cal
 The self-analysis experiment reconstructs the pre-extraction code only in an isolated copy, verifies its finding and source evidence, and compares it with the real implementation. The finding retains its stable identity and a deferred review; the script does not claim that a legitimate JSON callback's dual role is a defect or automatically fixed. It also verifies normalization parameter-flow edges and finite caller scores backed by graph counts.
 
 Run `TMPDIR=/tmp pnpm self:analyze`. Evidence, scores, reviewed hypotheses, snapshots, and the source-linked diff are retained in `.twinlens/analysis/`; the concise `report.json` records reproduction evidence and current counts. See [Phase 3's contract](phase3.md) for inference limits and lifecycle semantics.
+
+## Phase 4: structural specification
+
+`TMPDIR=/tmp pnpm self:verify` compiles `specs/twinlens.tsp` and evaluates five selected invariants against the real code and combined snapshot: core dependencies, AST-free Store representation, stable IDs, observation ownership, and valid references. An isolated fixture introduces a forbidden import, an AST field, and a dangling observation. All five constraints must report violations with source evidence. Missing evidence remains unknown, unsupported heap semantics remain unsupported, and the runtime claim stays deferred.
+
+The gate retains specification, graph evidence, positive and negative reports, uncertainty cases, and `report.json` in ignored `.twinlens/specification/`. See [Phase 4](phase4.md) for the exact structural scope; positive results do not establish runtime heap safety. CI runs this gate alongside the three earlier self-application gates.
+
+The final Phase 4 run on 2026-10-04 passed all four self-application gates and all 179 integration/unit tests in the TypeScript runner, alongside Zig unit tests. The combined scan covered 26 source files with zero compiler diagnostics. All five selected invariants were satisfied on the real project and violated in the deliberate negative fixture. Compiler-backed test suites run sequentially to stay within the development environment’s thread limit.

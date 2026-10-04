@@ -43,6 +43,9 @@ importers:
       '@twinlens/transport':
         specifier: workspace:*
         version: link:../transport
+      '@typespec/compiler':
+        specifier: 1.16.0
+        version: 1.16.0(@types/node@26.6.3)
 
 packages:
 

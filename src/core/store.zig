@@ -23,6 +23,11 @@ pub const Store = struct {
     pub fn decode(allocator: std.mem.Allocator, input: []const u8) !Store {
         const shape = try std.json.parseFromSlice(std.json.Value, allocator, input, .{});
         defer shape.deinit();
+        if (shape.value == .object and shape.value.object.contains("specification_version")) {
+            const spec = try @import("specification.zig").decode(allocator, input);
+            defer spec.deinit();
+            return fromDocument(allocator, spec.value.snapshot.document);
+        }
         if (shape.value == .object and shape.value.object.contains("snapshot_version")) {
             const snapshot = try snapshots.decode(allocator, input);
             defer snapshot.deinit();

@@ -63,7 +63,7 @@ export interface Document {
   relations: Relation[];
 }
 
-function stableId<K extends string>(prefix: string, fields: string[]): Id<K> {
+export function stableId<K extends string>(prefix: string, fields: string[]): Id<K> {
   const hash = createHash("sha256");
   for (const field of fields) {
     const bytes = Buffer.from(field, "utf8");
@@ -280,3 +280,5 @@ export function encodeDocument(value: Document): string {
 
 export { encodeSnapshot, validateSnapshot } from "./snapshot.js";
 export type { Snapshot, FileDigest, CompilerDiagnostic } from "./snapshot.js";
+
+export * from "./specification.js";

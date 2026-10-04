@@ -6,9 +6,15 @@ pub const Store = @import("store.zig").Store;
 pub const Filter = @import("store.zig").Filter;
 pub const snapshot = @import("snapshot.zig");
 pub const merge = @import("merge.zig");
+pub const specification = @import("specification.zig");
 pub const analysis = @import("analysis.zig");
 pub const diff = @import("diff.zig");
 
 test {
     std.testing.refAllDecls(@This());
 }
+
+// Structural inspection checks source against the schema/index compiled into this binary.
+pub const ir_source = @embedFile("ir.zig");
+pub const index_source = @embedFile("index.zig");
+pub const store_source = @embedFile("store.zig");
