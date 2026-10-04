@@ -25,3 +25,4 @@ jobs:
       - run: pnpm check
       - run: pnpm self:observe
       - run: pnpm self:observe:all
+      - run: pnpm self:analyze

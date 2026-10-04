@@ -1,2 +1,3 @@
 import { defineConfig } from "vitest/config";
-export default defineConfig({ test: { include: ["tests/**/*.test.ts"] } });
+// Compiler-backed suites spawn additional processes; bound resource contention.
+export default defineConfig({ test: { include: ["tests/**/*.test.ts"], maxWorkers: 2 } });

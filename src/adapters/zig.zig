@@ -4,7 +4,7 @@ const core = @import("twinlens");
 const ir = core.ir;
 const Ast = std.zig.Ast;
 const Node = Ast.Node.Index;
-const producer = "zig-bt/1";
+const producer = "zig-bt/2";
 const Entry = struct {
     file: usize,
     node: Node,
@@ -405,6 +405,88 @@ const Scanner = struct {
             }
         }
     }
+    fn flowEvent(self: *Scanner, fi: usize, n: Node, kind: []const u8, roots: []const Node, edge_kind: []const u8, output: ?usize) !void {
+        const origin = self.nodeSource(fi, n);
+        const owner_index = self.owner(fi, origin.span.start);
+        const owner_subject = if (owner_index) |o| self.entries.items[o].subject else self.files.items[fi].subject;
+        const event = try self.subject(try std.fmt.allocPrint(self.a, "{s}/{s}", .{ self.subjects.items[owner_subject].key.name, kind }), kind, origin);
+        try self.relation(owner_subject, event, "contains", origin);
+        if (output) |target| try self.relation(event, target, "output", origin);
+        const t = self.files.items[fi].tree;
+        for (roots) |root| {
+            const span = self.nodeSource(fi, root).span;
+            for (1..t.nodes.len) |j| {
+                const ref: Node = @enumFromInt(j);
+                const tag = t.nodeTag(ref);
+                if (tag != .identifier and tag != .field_access) continue;
+                const site = self.nodeSource(fi, ref);
+                if (site.span.start < span.start or site.span.end > span.end or self.owner(fi, site.span.start) != owner_index or self.inType(fi, site.span.start)) continue;
+                if (self.resolve(fi, ref, 0)) |ei| {
+                    const e = self.entries.items[ei];
+                    if (!eq(e.kind, "value") and !eq(e.kind, "parameter") and !eq(e.kind, "property")) continue;
+                    try self.relation(e.subject, event, edge_kind, site);
+                    if (output) |target| try self.relation(e.subject, target, "flows_to", site);
+                    if (tag == .field_access) if (self.resolve(fi, t.nodeData(ref).node_and_token[0], 0)) |receiver| {
+                        try self.relation(self.entries.items[receiver].subject, e.subject, "uses_property", site);
+                    };
+                } else if (!eq(t.tokenSlice(t.nodeMainToken(ref)), "_")) {
+                    try self.relation(event, null, "flow_unknown", site);
+                }
+            }
+        }
+    }
+    fn flow(self: *Scanner, fi: usize) !void {
+        const t = self.files.items[fi].tree;
+        if (t.errors.len > 0) return;
+        const subsystem = try self.subject(self.files.items[fi].path, "subsystem", self.source(fi, 0, @intCast(t.source.len)));
+        try self.relation(self.files.items[fi].subject, subsystem, "belongs_to", self.subjects.items[self.files.items[fi].subject].source);
+        for (self.entries.items, 0..) |e, ei| if (e.file == fi) {
+            const source_info = self.subjects.items[e.subject].source;
+            try self.relation(e.subject, subsystem, "belongs_to", source_info);
+            if (self.owner(fi, source_info.span.start)) |o| if (o != ei) {
+                try self.relation(self.entries.items[o].subject, e.subject, "contains", source_info);
+            };
+        };
+        for (1..t.nodes.len) |i| {
+            const n: Node = @enumFromInt(i);
+            const tag = t.nodeTag(n);
+            var b: [1]Node = undefined;
+            var bb: [2]Node = undefined;
+            if (t.fullCall(&b, n)) |c| {
+                try self.flowEvent(fi, n, "call", c.ast.params, "argument", null);
+            } else if (t.builtinCallParams(&bb, n)) |params| {
+                try self.flowEvent(fi, n, "call", params, "argument", null);
+            } else if (t.fullIf(n)) |v| {
+                try self.flowEvent(fi, n, "branch", &.{v.ast.cond_expr}, "controls", null);
+            } else if (t.fullWhile(n)) |v| {
+                try self.flowEvent(fi, n, "branch", &.{v.ast.cond_expr}, "controls", null);
+            } else if (t.fullFor(n)) |v| {
+                try self.flowEvent(fi, n, "branch", v.ast.inputs, "controls", null);
+            } else if (t.fullSwitch(n)) |v| {
+                try self.flowEvent(fi, n, "branch", &.{v.ast.condition}, "controls", null);
+            } else if (tag == .bool_and or tag == .bool_or or tag == .@"orelse" or tag == .@"catch") {
+                try self.flowEvent(fi, n, "branch", &.{t.nodeData(n).node_and_node[0]}, "controls", null);
+            } else if (tag == .@"return") {
+                if (t.nodeData(n).opt_node.unwrap()) |expr| try self.flowEvent(fi, n, "return", &.{expr}, "returns", null);
+            }
+            if (t.fullVarDecl(n)) |v| {
+                if (v.ast.init_node.unwrap()) |expr| for (self.entries.items) |e| if (e.file == fi and e.node == n) {
+                    try self.flowEvent(fi, n, "computation", &.{expr}, "input", e.subject);
+                    break;
+                };
+            } else if (std.mem.startsWith(u8, @tagName(tag), "assign") and tag != .assign_destructure) {
+                const data = t.nodeData(n).node_and_node;
+                const target = self.resolve(fi, data[0], 0);
+                const roots = if (tag == .assign) &[_]Node{data[1]} else &data;
+                try self.flowEvent(fi, n, "computation", roots, "input", if (target) |e| self.entries.items[e].subject else null);
+                if (target == null) try self.relation(self.files.items[fi].subject, null, "flow_unknown", self.nodeSource(fi, n));
+            } else if (tag == .assign_destructure) {
+                try self.relation(self.files.items[fi].subject, null, "flow_unknown", self.nodeSource(fi, n));
+            }
+        }
+        try self.measure(self.files.items[fi].subject, "file.flow", missing(.unsupported, "Potential syntactic dependencies only; no path-sensitive, heap, alias, or interprocedural flow"));
+    }
+
     fn metrics(self: *Scanner) !void {
         for (self.entries.items, 0..) |e, ei| {
             if (eq(e.kind, "function")) {
@@ -504,6 +586,7 @@ pub fn scan(gpa: std.mem.Allocator, io: std.Io, input: []const u8, project: ?[]c
     for (0..s.files.items.len) |i| try s.declarations(i);
     for (0..s.files.items.len) |i| try s.telemetry(i);
     try s.metrics();
+    for (0..s.files.items.len) |i| try s.flow(i);
     inline for (.{ s.subjects.items, s.symbols.items, s.observations.items, s.relations.items }) |rows| std.mem.sort(@TypeOf(rows[0]), rows, {}, struct {
         fn less(_: void, l: @TypeOf(rows[0]), r: @TypeOf(rows[0])) bool {
             return std.mem.lessThan(u8, l.id.bytes, r.id.bytes);

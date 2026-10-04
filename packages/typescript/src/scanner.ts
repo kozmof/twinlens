@@ -1,4 +1,5 @@
 import ts from "typescript-api";
+import { extractFlow } from "./flow.js";
 import { basename, resolve } from "node:path";
 import {
   createDocument,
@@ -15,9 +16,9 @@ import {
 } from "@twinlens/transport";
 import { byteOffset, digest, loadProject, relativePath } from "./project.js";
 
-const producer = "typescript-bt/1";
+const producer = "typescript-bt/2";
 type FunctionNode = ts.FunctionLikeDeclaration;
-interface Entry {
+export interface Entry {
   node: ts.Node;
   subject: Subject;
   checker: ts.TypeChecker;
@@ -211,6 +212,7 @@ export function scanProject(input: string, options: ScanOptions = {}): Snapshot 
     name: string,
     file: ts.SourceFile,
     checker: ts.TypeChecker,
+    register = true,
   ): Entry {
     const origin = source(file, node);
     const base = `${origin.path}\0${category}\0${name}`;
@@ -229,7 +231,7 @@ export function scanProject(input: string, options: ScanOptions = {}): Snapshot 
     document.subjects.push(subject);
     document.symbols.push({ id: symbolId(subject.id), subject: subject.id, name });
     entries.push(entry);
-    lookup.set(location(node), entry);
+    if (register) lookup.set(location(node), entry);
     if (category === "function") functionEntries.push(entry);
     return entry;
   }
@@ -275,7 +277,7 @@ export function scanProject(input: string, options: ScanOptions = {}): Snapshot 
       from: from.subject.id,
       kind: type,
       target,
-      source: source(from.file, node),
+      source: source(node.getSourceFile(), node),
       revision,
     };
     const id = relationId(value);
@@ -502,6 +504,34 @@ export function scanProject(input: string, options: ScanOptions = {}): Snapshot 
       measured(unresolved.get(entry.subject.id) ?? 0),
     );
   }
+  extractFlow(files, [...entries], {
+    add: (node, category, name, owner) =>
+      add(node, category, name, owner.file, owner.checker, false),
+    entry: (node) => lookup.get(location(node)),
+    function: isFunction,
+    reference: isReference,
+    inType,
+    resolve: (node, owner) => {
+      const checker = owner.checker;
+      const symbol = ts.isPropertyAccessExpression(node)
+        ? checker.getSymbolAtLocation(node.name)
+        : ts.isElementAccessExpression(node) &&
+            node.argumentExpression &&
+            (ts.isStringLiteralLike(node.argumentExpression) ||
+              ts.isNumericLiteral(node.argumentExpression))
+          ? checker.getTypeAtLocation(node.expression).getProperty(node.argumentExpression.text)
+          : checker.getSymbolAtLocation(node);
+      return symbolEntry(symbol, checker);
+    },
+    relation,
+  });
+  for (const file of files)
+    measure(file, "file.flow", {
+      status: "unsupported",
+      value: null,
+      reason:
+        "Potential syntactic dependencies only; no path-sensitive, heap, alias, or interprocedural flow",
+    });
   document.relations = [...relations.values()];
   for (const rows of [
     document.subjects,

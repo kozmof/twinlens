@@ -20,12 +20,14 @@ const root = resolve(".");
 const artifactRoot = whole ? ".twinlens/whole" : ".twinlens/self";
 const output = join(root, artifactRoot);
 mkdirSync(output, { recursive: true });
+const configPath = join(output, "config.json");
+writeFileSync(configPath, JSON.stringify({ max_input_bytes: 134217728 }));
 const cli = (...args) => {
-  const result = spawnSync(join(root, "zig-out/bin/twinlens"), args, {
+  const result = spawnSync(join(root, "zig-out/bin/twinlens"), ["--config", configPath, ...args], {
     cwd: root,
     encoding: "utf8",
     timeout: 60000,
-    maxBuffer: 32 * 1024 * 1024,
+    maxBuffer: 128 * 1024 * 1024,
   });
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(result.stderr);

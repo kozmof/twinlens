@@ -47,3 +47,13 @@ The combined call graph includes 98 resolved TypeScript edges and 136 resolved Z
 The isolated copy matched the original combined IR before editing. Adding an optional TypeScript parameter changed `createDocument`'s argument count from 1 to 2. Adding a guard in `src/core/identity.zig` changed `valid`'s branch count from 7 to 8, preserving its subject identity and source links.
 
 Run `TMPDIR=/tmp pnpm self:observe:all` to reproduce the experiment. It retains `.twinlens/whole/{baseline,after,diff,report}.json` locally; these generated artifacts are ignored by Git. The report includes graph examples, source-linked metric changes, coverage, and a baseline digest. Counts can change as the implementation grows.
+
+## Phase 3: evidence-guided normalization
+
+The Phase 3 gate on 2026-10-04 applied branch telemetry to both query methods in `src/core/store.zig`, potential dataflow to compiler-option normalization, and caller significance to the scanner/flow adapters. It produced an informational responsibility-split hypothesis for the JSON normalization callback: `key` controls metadata filtering while `value` controls path normalization.
+
+The justified change extracts `normalizeOptionValue` for direct testing. The callback's branch count changes from **5 to 1**, while the helper contains **4** branches. Equivalence tests preserve handling of root, local and external paths, relative strings, primitive values, object identity, and metadata-key filtering. Total logic was moved into a testable boundary, not eliminated. Both query methods report 13 syntactic branches in this run.
+
+The self-analysis experiment reconstructs the pre-extraction code only in an isolated copy, verifies its finding and source evidence, and compares it with the real implementation. The finding retains its stable identity and a deferred review; the script does not claim that a legitimate JSON callback's dual role is a defect or automatically fixed. It also verifies normalization parameter-flow edges and finite caller scores backed by graph counts.
+
+Run `TMPDIR=/tmp pnpm self:analyze`. Evidence, scores, reviewed hypotheses, snapshots, and the source-linked diff are retained in `.twinlens/analysis/`; the concise `report.json` records reproduction evidence and current counts. See [Phase 3's contract](phase3.md) for inference limits and lifecycle semantics.

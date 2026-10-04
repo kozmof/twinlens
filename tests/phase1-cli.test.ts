@@ -62,7 +62,7 @@ beforeAll(() => {
 describe("scan, snapshots and indexed queries", () => {
   it("persists an importable snapshot with provenance and configuration", () => {
     expect(snapshot.snapshot_version).toBe(1);
-    expect(snapshot.configuration.adapter).toBe("typescript-bt/1");
+    expect(snapshot.configuration.adapter).toBe("typescript-bt/2");
     expect(ok("import", baseline)).toEqual(snapshot.document);
   });
   it("queries by symbol name/ID, revision, path and byte span", () => {
@@ -204,7 +204,7 @@ describe("semantic snapshot diff", () => {
     expect(diff.subjects.removed.some((s) => s.key.name === "arrow")).toBe(true);
     expect(diff.subjects.added.some((s) => s.key.name === "increment")).toBe(true);
     const configChange = structuredClone(snapshot);
-    configChange.configuration.adapter = "typescript-bt/2";
+    configChange.configuration.adapter = `${snapshot.configuration.adapter}-changed`;
     expect(ok("diff", baseline, file(configChange)).configuration_changed).toBe(true);
     const wrongProject = structuredClone(snapshot);
     wrongProject.project = "other";

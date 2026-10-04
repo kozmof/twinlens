@@ -11,6 +11,14 @@ export function relativePath(root: string, file: string): string | undefined {
   const path = relative(root, resolve(file)).split(sep).join("/");
   return path && path !== ".." && !path.startsWith("../") && !isAbsolute(path) ? path : undefined;
 }
+/** Normalize option values independently from JSON metadata-key filtering. */
+export function normalizeOptionValue(root: string, value: unknown): unknown {
+  if (typeof value === "string" && isAbsolute(value))
+    return resolve(value) === root
+      ? "."
+      : (relativePath(root, value) ?? "<external>/" + value.split(sep).slice(-2).join("/"));
+  return value;
+}
 const byteMaps = new WeakMap<ts.SourceFile, { bom: number; positions: Map<number, number> }>();
 export function byteOffset(file: ts.SourceFile, offset: number): number {
   let map = byteMaps.get(file);
@@ -71,11 +79,7 @@ export function loadProject(input: string): Project {
     for (const ref of parsed.projectReferences ?? []) load(ts.resolveProjectReferencePath(ref));
     const normalizedOptions = JSON.stringify(parsed.options, (key, value: unknown) => {
       if (key === "configFile") return undefined;
-      if (typeof value === "string" && isAbsolute(value))
-        return resolve(value) === root
-          ? "."
-          : (relativePath(root, value) ?? "<external>/" + value.split(sep).slice(-2).join("/"));
-      return value;
+      return normalizeOptionValue(root, value);
     });
     options.push([relativePath(root, path), JSON.parse(normalizedOptions)]);
     if (parsed.fileNames.length) {

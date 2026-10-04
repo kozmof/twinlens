@@ -15,6 +15,10 @@ const help =
     \\  diff BEFORE AFTER [--out FILE]       Compare two snapshots
     \\  update BASE REPLACEMENT --file PATH [--out FILE]
     \\                                      Replace/remove one file in IR; emit new IR
+    \\  analyze SNAPSHOT [--previous REPORT] [--out FILE]
+    \\                                      Generate evidence, hypotheses and caller scores
+    \\  review REPORT --finding ID --status STATE --note TEXT [--out FILE]
+    \\                                      Record a finding review decision
     \\  --help                              Show this help
     \\  --version                           Show version
     \\Config: max_input_bytes (16 MiB), typescript_adapter (packages/typescript/dist/cli.js).
@@ -27,7 +31,7 @@ const Config = struct {
     typescript_adapter: []const u8 = "packages/typescript/dist/cli.js",
 };
 const Options = struct {
-    command: enum { help, version, import, query, scan, diff, update },
+    command: enum { help, version, import, query, scan, diff, update, analyze, review },
     path: ?[]const u8 = null,
     second: ?[]const u8 = null,
     config: ?[]const u8 = null,
@@ -35,6 +39,10 @@ const Options = struct {
     project: ?[]const u8 = null,
     file: ?[]const u8 = null,
     language: ?enum { typescript, zig, both } = null,
+    previous: ?[]const u8 = null,
+    finding: ?[]const u8 = null,
+    status: ?core.analysis.Status = null,
+    note: ?[]const u8 = null,
     relations: bool = false,
     filter: core.Filter = .{},
 };
@@ -77,7 +85,7 @@ fn parseArgs(args: []const []const u8) !Options {
         const value = args[i];
         i += 1;
         if (!core.ir.nonempty(value)) return error.EmptyOptionValue;
-        if ((command == .scan or command == .diff or command == .update) and std.mem.eql(u8, option, "--out") and options.out == null) {
+        if ((command == .scan or command == .diff or command == .update or command == .analyze or command == .review) and std.mem.eql(u8, option, "--out") and options.out == null) {
             options.out = value;
             continue;
         }
@@ -98,6 +106,24 @@ fn parseArgs(args: []const []const u8) !Options {
             options.filter.revision = value;
             continue;
         }
+        if (command == .analyze and std.mem.eql(u8, option, "--previous") and options.previous == null) {
+            options.previous = value;
+            continue;
+        }
+        if (command == .review) {
+            if (std.mem.eql(u8, option, "--finding") and options.finding == null) {
+                options.finding = value;
+                continue;
+            }
+            if (std.mem.eql(u8, option, "--status") and options.status == null) {
+                options.status = std.meta.stringToEnum(core.analysis.Status, value) orelse return error.InvalidReviewStatus;
+                continue;
+            }
+            if (std.mem.eql(u8, option, "--note") and options.note == null) {
+                options.note = value;
+                continue;
+            }
+        }
         if (command != .query) return error.UnexpectedArgument;
         if (std.mem.eql(u8, option, "--subject") and options.filter.subject == null) {
             if (!core.identity.valid(value, "sub_")) return error.InvalidSubjectId;
@@ -117,6 +143,7 @@ fn parseArgs(args: []const []const u8) !Options {
             options.filter.end = std.fmt.parseInt(u32, value, 10) catch return error.InvalidOffset;
         } else return error.UnexpectedArgument;
     }
+    if (command == .review and (options.finding == null or options.status == null or options.note == null)) return error.ExpectedReviewFields;
     if (command == .update and options.file == null) return error.ExpectedReplacementFile;
     if (options.relations and options.filter.metric != null) return error.MetricFilterRequiresObservations;
     if ((options.filter.start != null or options.filter.end != null) and options.filter.path == null) return error.OffsetRequiresSourcePath;
@@ -192,6 +219,27 @@ fn run(init: std.process.Init) !u8 {
                 return emit(init, combined, options.out);
             }
             return emit(init, snapshot.value, options.out);
+        },
+        .analyze => {
+            const bytes = read(init, options.path.?, config) catch |err| return diagnostic(init, 4, @errorName(err), "Cannot read snapshot.", options.path);
+            const snapshot = core.snapshot.decode(allocator, bytes) catch |err| return diagnostic(init, 5, @errorName(err), "Invalid snapshot.", options.path);
+            defer snapshot.deinit();
+            var previous: ?std.json.Parsed(core.analysis.Report) = null;
+            defer if (previous) |old| old.deinit();
+            if (options.previous) |path| {
+                const old_bytes = read(init, path, config) catch |err| return diagnostic(init, 4, @errorName(err), "Cannot read previous analysis.", path);
+                previous = core.analysis.decode(allocator, old_bytes) catch |err| return diagnostic(init, 5, @errorName(err), "Invalid previous analysis.", path);
+            }
+            var result = core.analysis.analyze(allocator, snapshot.value, if (previous) |old| old.value else null) catch |err| return diagnostic(init, 5, @errorName(err), "Cannot analyze snapshot or reconcile review history.", options.path);
+            defer result.deinit();
+            return emit(init, result.report, options.out);
+        },
+        .review => {
+            const bytes = read(init, options.path.?, config) catch |err| return diagnostic(init, 4, @errorName(err), "Cannot read analysis.", options.path);
+            var report = core.analysis.decode(allocator, bytes) catch |err| return diagnostic(init, 5, @errorName(err), "Invalid analysis.", options.path);
+            defer report.deinit();
+            core.analysis.review(allocator, &report.value, options.finding.?, options.status.?, options.note.?) catch |err| return diagnostic(init, 5, @errorName(err), "Cannot review finding.", options.path);
+            return emit(init, report.value, options.out);
         },
         .diff => {
             const left_bytes = read(init, options.path.?, config) catch |err| return diagnostic(init, 4, @errorName(err), "Cannot read before snapshot.", options.path);
