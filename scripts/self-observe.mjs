@@ -14,8 +14,11 @@ import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
 
+const whole = process.argv.includes("--all");
+const languageArgs = whole ? ["--language", "both"] : [];
 const root = resolve(".");
-const output = join(root, ".twinlens/self");
+const artifactRoot = whole ? ".twinlens/whole" : ".twinlens/self";
+const output = join(root, artifactRoot);
 mkdirSync(output, { recursive: true });
 const cli = (...args) => {
   const result = spawnSync(join(root, "zig-out/bin/twinlens"), args, {
@@ -30,7 +33,7 @@ const cli = (...args) => {
 };
 const read = (path) => JSON.parse(readFileSync(path, "utf8"));
 const baselinePath = join(output, "baseline.json");
-cli("scan", "tsconfig.json", "--project", "twinlens", "--out", baselinePath);
+cli("scan", "tsconfig.json", ...languageArgs, "--project", "twinlens", "--out", baselinePath);
 const baseline = read(baselinePath);
 assert.equal(
   baseline.diagnostics.filter((d) => d.category === "error").length,
@@ -41,6 +44,10 @@ const scratch = mkdtempSync(join(tmpdir(), "twinlens-self-"));
 try {
   for (const path of ["tsconfig.json", "tsconfig.base.json", "package.json"])
     cpSync(join(root, path), join(scratch, path));
+  if (whole) {
+    cpSync(join(root, "src"), join(scratch, "src"), { recursive: true });
+    cpSync(join(root, "build.zig"), join(scratch, "build.zig"));
+  }
   cpSync(join(root, "packages"), join(scratch, "packages"), {
     recursive: true,
     filter: (path) => !path.split(sep).includes("node_modules"),
@@ -51,7 +58,13 @@ try {
     if (existsSync(modules))
       symlinkSync(modules, join(scratch, "packages", name, "node_modules"), "dir");
   }
-  const copy = cli("scan", join(scratch, "tsconfig.json"), "--project", "twinlens");
+  const copy = cli(
+    "scan",
+    join(scratch, "tsconfig.json"),
+    ...languageArgs,
+    "--project",
+    "twinlens",
+  );
   assert.deepEqual(
     copy.document,
     baseline.document,
@@ -65,8 +78,26 @@ try {
   );
   assert.notEqual(after, before, "Controlled edit must match exactly");
   writeFileSync(source, after);
+  if (whole) {
+    const zigPath = join(scratch, "src/core/identity.zig");
+    const zigBefore = readFileSync(zigPath, "utf8");
+    const zigAfter = zigBefore.replace(
+      "pub fn valid(bytes: []const u8, prefix: []const u8) bool {",
+      "pub fn valid(bytes: []const u8, prefix: []const u8) bool {\n    if (bytes.len == 0) return false;",
+    );
+    assert.notEqual(zigAfter, zigBefore, "Controlled Zig edit must match");
+    writeFileSync(zigPath, zigAfter);
+  }
   const afterPath = join(output, "after.json");
-  cli("scan", join(scratch, "tsconfig.json"), "--project", "twinlens", "--out", afterPath);
+  cli(
+    "scan",
+    join(scratch, "tsconfig.json"),
+    ...languageArgs,
+    "--project",
+    "twinlens",
+    "--out",
+    afterPath,
+  );
   assert.equal(
     read(afterPath).diagnostics.filter((d) => d.category === "error").length,
     0,
@@ -92,6 +123,42 @@ try {
       ["function.args.count", "function.parameter.property_count"].includes(o.metric),
   );
   assert.equal(observations.length, 2, "Retain scanner arguments and IR key property evidence");
+  const zigEvidence = [];
+  const graph = {};
+  if (whole) {
+    const zigSubject = baseline.document.subjects.find(
+      (s) =>
+        s.key.language === "zig" &&
+        s.key.path === "src/core/identity.zig" &&
+        s.key.name === "valid",
+    );
+    const zigChange = diff.observations.changed.find(
+      (c) => c.before.subject === zigSubject.id && c.before.metric === "function.branch.count",
+    );
+    assert.equal(zigChange.after.measurement.value, zigChange.before.measurement.value + 1);
+    assert.equal(zigChange.before.source.path, "src/core/identity.zig");
+    zigEvidence.push(zigChange);
+    const ids = new Map(baseline.document.subjects.map((s) => [s.id, s]));
+    for (const language of ["typescript", "zig"]) {
+      const edges = baseline.document.relations.filter(
+        (r) =>
+          r.kind === "calls" &&
+          r.target.status === "resolved" &&
+          ids.get(r.from).key.language === language,
+      );
+      assert.ok(edges.length > 0, language + " resolved call graph");
+      assert.ok(
+        edges.every((r) => ids.has(r.target.subject)),
+        "All call endpoints present",
+      );
+      graph[language] = { resolved_edges: edges.length, example: edges[0] };
+    }
+    assert.ok(
+      baseline.document.observations.some(
+        (o) => o.source.language === "zig" && o.measurement.status === "unsupported",
+      ),
+    );
+  }
   const summary = {
     baseline_sha256: createHash("sha256").update(readFileSync(baselinePath)).digest("hex"),
     revision: baseline.document.revision,
@@ -102,6 +169,15 @@ try {
     compiler_diagnostics: baseline.diagnostics.length,
     coverage: baseline.coverage,
     self_evidence: observations,
+    ...(whole
+      ? {
+          call_graph: graph,
+          zig_controlled_edit: zigEvidence,
+          unsupported_observations: baseline.document.observations.filter(
+            (o) => o.measurement.status === "unsupported",
+          ).length,
+        }
+      : {}),
     controlled_edit: {
       source: "packages/transport/src/index.ts",
       subject: subject.id,
@@ -110,9 +186,9 @@ try {
       after: change.after.measurement.value,
     },
     artifacts: [
-      ".twinlens/self/baseline.json",
-      ".twinlens/self/after.json",
-      ".twinlens/self/diff.json",
+      `${artifactRoot}/baseline.json`,
+      `${artifactRoot}/after.json`,
+      `${artifactRoot}/diff.json`,
     ],
   };
   writeFileSync(join(output, "report.json"), JSON.stringify(summary, null, 2) + "\n");

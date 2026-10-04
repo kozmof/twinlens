@@ -2,7 +2,7 @@
 
 Twinlens combines Specification Analysis (SA) with Behavioral Telemetry (BT) to expose hidden assumptions through evidence from specifications and code.
 
-Phase 1 provides TypeScript source analysis, static telemetry, indexed Zig queries, snapshots, and historical diffs on top of the Phase 0 IR/CLI. Twinlens can now observe its own TypeScript packages. Zig source analysis, TypeSpec lowering, and verification engines remain later phases.
+Phase 2 provides TypeScript and Zig source analysis, static telemetry, indexed queries, snapshots, and historical diffs. Twinlens can observe both of its language domains in one snapshot. TypeSpec lowering and verification engines remain later phases.
 
 ## Toolchain
 
@@ -44,9 +44,11 @@ If a managed environment supplies an unwritable temporary directory, use `TMPDIR
 ./zig-out/bin/twinlens query baseline.json --relations --relation calls
 ./zig-out/bin/twinlens diff baseline.json baseline.json
 pnpm self:observe
+./zig-out/bin/twinlens scan tsconfig.json --language both --project twinlens --out whole.json
+pnpm self:observe:all
 ```
 
-See [Phase 1](docs/phase1.md) for sensor definitions, snapshot formats, file updates, and analysis limits. The source adapter uses the TypeScript 6.0.3 compiler API; TypeScript 7.0.2 remains the build compiler.
+See [Phase 2](docs/phase2.md) for Zig syntax support, uncertainty, and combined scans. See [Phase 1](docs/phase1.md) for sensor definitions, snapshot formats, file updates, and analysis limits. The source adapter uses the TypeScript 6.0.3 compiler API; TypeScript 7.0.2 remains the build compiler.
 
 ## Try the seed boundary
 
@@ -67,14 +69,14 @@ Configuration is loaded only when `--config FILE` precedes the command. Its `max
 
 ## CLI contract
 
-| Command                                                       | Standard output                                                            |
-| ------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `import FILE`                                                 | Validated IR v1 JSON document, preserving array order                      |
-| `query FILE [--subject ID] [--metric NAME]`                   | JSON object with `schema_version`, `revision`, and matching `observations` |
-| `scan TSCONFIG [--project NAME] [--revision ID] [--out FILE]` | Snapshot JSON, or atomically write a snapshot                              |
-| `diff BEFORE AFTER [--out FILE]`                              | Snapshot differences as JSON                                               |
-| `update BASE REPLACEMENT --file PATH [--out FILE]`            | Updated IR; invalidated aggregates become unknown                          |
-| `--help`, `--version`                                         | Human-readable text                                                        |
+| Command                                                                                         | Standard output                                                            |
+| ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `import FILE`                                                                                   | Validated IR v1 JSON document, preserving array order                      |
+| `query FILE [--subject ID] [--metric NAME]`                                                     | JSON object with `schema_version`, `revision`, and matching `observations` |
+| `scan INPUT [--language typescript\| zig\| both] [--project NAME] [--revision ID] [--out FILE]` | Snapshot JSON, or atomically write a snapshot                              |
+| `diff BEFORE AFTER [--out FILE]`                                                                | Snapshot differences as JSON                                               |
+| `update BASE REPLACEMENT --file PATH [--out FILE]`                                              | Updated IR; invalidated aggregates become unknown                          |
+| `--help`, `--version`                                                                           | Human-readable text                                                        |
 
 Failures emit one JSON object to stderr with `code`, `message`, and `path` (nullable), and no successful result on stdout. Query with no matches succeeds with an empty list. A missing observation is not interpreted as a zero or as a failed measurement.
 
@@ -95,6 +97,7 @@ Zig defines Twinlens semantics. TypeScript provides permanent compiler ecosystem
 | ----------------------- | --------------------------------------------------------------------------------------------- |
 | `src/core/`             | Typed IDs, IR/snapshot validation, indexed store, queries, file replacement, diff             |
 | `src/main.zig`          | CLI, config, adapter orchestration, I/O, diagnostics                                          |
+| `src/adapters/`         | Zig AST extraction and static telemetry, separate from the semantic core                      |
 | `packages/transport/`   | TypeScript IR/snapshot types, identity encoding, structural validation, JSON encoding         |
 | `packages/typescript/`  | Compiler project loading, source extraction, static sensors, snapshot production              |
 | `packages/typespec/`    | Package boundary for later TypeSpec lowering; currently creates empty specification documents |

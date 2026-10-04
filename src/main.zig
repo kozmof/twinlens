@@ -1,11 +1,13 @@
 const std = @import("std");
+const zig_adapter = @import("zig_adapter");
 const core = @import("twinlens");
 const help =
     \\Twinlens — specification analysis and behavioral telemetry
     \\Usage: twinlens [--config FILE] COMMAND
     \\  import FILE                         Validate IR/snapshot and emit IR JSON
-    \\  scan TSCONFIG [--project NAME] [--revision ID] [--out FILE]
-    \\                                      Scan TypeScript and emit/persist a snapshot
+    \\  scan INPUT [--language typescript|zig|both] [--project NAME]
+    \\             [--revision ID] [--out FILE]
+    \\                                      Scan source and emit/persist a snapshot
     \\  query FILE [--subject ID] [--metric NAME] [--symbol NAME_OR_ID]
     \\             [--relation KIND] [--path PATH] [--start BYTE] [--end BYTE]
     \\             [--revision ID] [--relations]
@@ -32,6 +34,7 @@ const Options = struct {
     out: ?[]const u8 = null,
     project: ?[]const u8 = null,
     file: ?[]const u8 = null,
+    language: ?enum { typescript, zig, both } = null,
     relations: bool = false,
     filter: core.Filter = .{},
 };
@@ -76,6 +79,10 @@ fn parseArgs(args: []const []const u8) !Options {
         if (!core.ir.nonempty(value)) return error.EmptyOptionValue;
         if ((command == .scan or command == .diff or command == .update) and std.mem.eql(u8, option, "--out") and options.out == null) {
             options.out = value;
+            continue;
+        }
+        if (command == .scan and std.mem.eql(u8, option, "--language") and options.language == null) {
+            options.language = std.meta.stringToEnum(@typeInfo(@FieldType(Options, "language")).optional.child, value) orelse return error.InvalidLanguage;
             continue;
         }
         if (command == .scan and std.mem.eql(u8, option, "--project") and options.project == null) {
@@ -163,6 +170,11 @@ fn run(init: std.process.Init) !u8 {
         .help => try std.Io.File.stdout().writeStreamingAll(init.io, help),
         .version => try std.Io.File.stdout().writeStreamingAll(init.io, "twinlens 0.1.0 (IR v1, snapshots v1)\n"),
         .scan => {
+            if (options.language == .zig) {
+                var result = zig_adapter.scan(allocator, init.io, options.path.?, options.project, options.filter.revision, config.max_input_bytes) catch |err| return diagnostic(init, 4, @errorName(err), "Cannot scan Zig sources.", options.path);
+                defer result.deinit();
+                return emit(init, result.value, options.out);
+            }
             var argv: std.ArrayList([]const u8) = .empty;
             try argv.appendSlice(allocator, &.{ "node", config.typescript_adapter, options.path.? });
             if (options.project) |project| try argv.appendSlice(allocator, &.{ "--project", project });
@@ -171,6 +183,14 @@ fn run(init: std.process.Init) !u8 {
             if (result.term != .exited or result.term.exited != 0) return diagnostic(init, 4, "AdapterFailed", if (result.stderr.len > 0) result.stderr else "TypeScript adapter failed.", options.path);
             const snapshot = core.snapshot.decode(allocator, result.stdout) catch |err| return diagnostic(init, 5, @errorName(err), "TypeScript adapter emitted an invalid snapshot.", options.path);
             defer snapshot.deinit();
+            if (options.language == .both) {
+                const input = options.path.?;
+                const root = if (std.mem.endsWith(u8, input, ".json")) std.fs.path.dirname(input) orelse "." else input;
+                var zig_result = zig_adapter.scan(allocator, init.io, root, snapshot.value.project, options.filter.revision, config.max_input_bytes) catch |err| return diagnostic(init, 4, @errorName(err), "Cannot scan Zig sources.", options.path);
+                defer zig_result.deinit();
+                const combined = core.merge.combine(allocator, snapshot.value, zig_result.value, options.filter.revision) catch |err| return diagnostic(init, 5, @errorName(err), "Cannot combine language snapshots.", options.path);
+                return emit(init, combined, options.out);
+            }
             return emit(init, snapshot.value, options.out);
         },
         .diff => {

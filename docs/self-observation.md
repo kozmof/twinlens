@@ -1,4 +1,4 @@
-# TypeScript self-observation milestone
+# Self-observation milestones
 
 Phase 1 scanned Twinlens's own TypeScript packages through the compiler adapter and imported the result into the Zig core. The run completed with 0 compiler diagnostics.
 
@@ -37,3 +37,13 @@ Reproduce the experiment with `TMPDIR=/tmp pnpm self:observe` (the temp-director
 - `.twinlens/self/report.json` — selected self-evidence, counts, and hashes.
 
 Generated snapshots are retained locally in the ignored `.twinlens/` directory. Source changes will change the baseline counts and digest; the command checks the experiment itself rather than enforcing these numbers as design limits. CI runs the same self-observation gate after the normal checks.
+
+## Phase 2: both language domains
+
+The combined gate passed on 2026-10-03 with 19 source files, 1641 subjects, 4176 observations, and 2124 relations. It retained 0 diagnostics and 12 unsupported observations. Coverage reports 1023 unresolved call sites and 2654 unresolved accesses. Zig diagnostics cover syntax only; these numbers do not claim compiler-equivalent analysis.
+
+The combined call graph includes 98 resolved TypeScript edges and 136 resolved Zig edges. Every resolved endpoint exists in the combined snapshot. No cross-language FFI edges are inferred.
+
+The isolated copy matched the original combined IR before editing. Adding an optional TypeScript parameter changed `createDocument`'s argument count from 1 to 2. Adding a guard in `src/core/identity.zig` changed `valid`'s branch count from 7 to 8, preserving its subject identity and source links.
+
+Run `TMPDIR=/tmp pnpm self:observe:all` to reproduce the experiment. It retains `.twinlens/whole/{baseline,after,diff,report}.json` locally; these generated artifacts are ignored by Git. The report includes graph examples, source-linked metric changes, coverage, and a baseline digest. Counts can change as the implementation grows.
