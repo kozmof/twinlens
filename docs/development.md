@@ -7,6 +7,7 @@ Each substantial new analysis capability must be applied to Twinlens before its 
 - Run `TMPDIR=/tmp pnpm check` (the temp override is only needed in restricted environments).
 - Run the relevant self-application gates: `pnpm self:observe`, `pnpm self:observe:all`, and `pnpm self:analyze` when relationships, evidence, findings, or significance are affected.
 - Run `pnpm self:verify` for specification, evaluator, or structural-inspector changes. Check selected invariants, deliberate violations, missing evidence, and unsupported semantics.
+- Run `pnpm self:explore` for challenge, response-oracle, Store history, or exploration changes. Replay an intentional stale-record fault and verify the corrected adapter against the same trace; report all bounds and incomplete coverage.
 - Inspect source-linked evidence on a named Twinlens subsystem. Use the scanner for argument telemetry, IR processing for property telemetry, query/analysis for branches, normalization for dataflow, and sensor architecture for caller significance.
 - Record a hypothesis with its supporting observations/relations and known gaps. Do not infer a defect from a count alone.
 - Test a justified implementation/model change or document why the hypothesis should not prompt a change. Preserve any review decision rather than silently clearing it.

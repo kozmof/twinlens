@@ -20,6 +20,10 @@ const help =
     \\                                      Lower TypeSpec to specification IR
     \\  evaluate SPECIFICATION EVIDENCE [--out FILE]
     \\                                      Evaluate claims without executing user code
+    \\  challenges SPECIFICATION [--out FILE] Generate suspicious-case questions
+    \\  judge SPECIFICATION REQUEST [--out FILE] Judge a simultaneous response set
+    \\  explore MODEL [--out FILE]           Explore bounded Store histories
+    \\  replay REQUEST [--out FILE]          Replay a retained action trace
     \\  analyze SNAPSHOT [--previous REPORT] [--out FILE]
     \\                                      Generate evidence, hypotheses and caller scores
     \\  review REPORT --finding ID --status STATE --note TEXT [--out FILE]
@@ -37,7 +41,7 @@ const Config = struct {
     typespec_adapter: []const u8 = "packages/typespec/dist/cli.js",
 };
 const Options = struct {
-    command: enum { help, version, import, query, scan, diff, update, analyze, review, compile, evaluate, inspect },
+    command: enum { help, version, import, query, scan, diff, update, analyze, review, compile, evaluate, inspect, challenges, judge, explore, replay },
     path: ?[]const u8 = null,
     second: ?[]const u8 = null,
     config: ?[]const u8 = null,
@@ -75,7 +79,7 @@ fn parseArgs(args: []const []const u8) !Options {
     if (i == args.len or std.mem.startsWith(u8, args[i], "--")) return error.ExpectedInputPath;
     options.path = args[i];
     i += 1;
-    if (command == .diff or command == .update or command == .evaluate or command == .inspect) {
+    if (command == .diff or command == .update or command == .evaluate or command == .inspect or command == .judge) {
         if (i == args.len or std.mem.startsWith(u8, args[i], "--")) return error.ExpectedSecondPath;
         options.second = args[i];
         i += 1;
@@ -91,7 +95,7 @@ fn parseArgs(args: []const []const u8) !Options {
         const value = args[i];
         i += 1;
         if (!core.ir.nonempty(value)) return error.EmptyOptionValue;
-        if ((command == .scan or command == .diff or command == .update or command == .analyze or command == .review or command == .compile or command == .evaluate or command == .inspect) and std.mem.eql(u8, option, "--out") and options.out == null) {
+        if ((command == .scan or command == .diff or command == .update or command == .analyze or command == .review or command == .compile or command == .evaluate or command == .inspect or command == .challenges or command == .judge or command == .explore or command == .replay) and std.mem.eql(u8, option, "--out") and options.out == null) {
             options.out = value;
             continue;
         }
@@ -254,6 +258,37 @@ fn run(init: std.process.Init) !u8 {
             var result = core.specification.evaluate(allocator, spec.value, input.value) catch |err| return diagnostic(init, 5, @errorName(err), "Cannot evaluate specification.", options.path);
             defer result.deinit();
             return emit(init, result.report, options.out);
+        },
+        .challenges => {
+            const bytes = read(init, options.path.?, config) catch |err| return diagnostic(init, 4, @errorName(err), "Cannot read specification.", options.path);
+            const model = core.specification.decode(allocator, bytes) catch |err| return diagnostic(init, 5, @errorName(err), "Invalid specification.", options.path);
+            defer model.deinit();
+            return emit(init, try core.challenge.generate(allocator, model.value), options.out);
+        },
+        .judge => {
+            const bytes = read(init, options.path.?, config) catch |err| return diagnostic(init, 4, @errorName(err), "Cannot read specification.", options.path);
+            const model = core.specification.decode(allocator, bytes) catch |err| return diagnostic(init, 5, @errorName(err), "Invalid specification.", options.path);
+            defer model.deinit();
+            const request_bytes = read(init, options.second.?, config) catch |err| return diagnostic(init, 4, @errorName(err), "Cannot read oracle request.", options.second);
+            const request = core.challenge.decode(core.challenge.Request, allocator, request_bytes) catch |err| return diagnostic(init, 5, @errorName(err), "Invalid oracle request.", options.second);
+            defer request.deinit();
+            const judgment = core.challenge.judge(allocator, model.value, request.value) catch |err| return diagnostic(init, 5, @errorName(err), "Cannot judge response.", options.second);
+            return emit(init, judgment, options.out);
+        },
+        .explore => {
+            const bytes = read(init, options.path.?, config) catch |err| return diagnostic(init, 4, @errorName(err), "Cannot read exploration model.", options.path);
+            const model = core.challenge.decode(core.exploration.Model, allocator, bytes) catch |err| return diagnostic(init, 5, @errorName(err), "Invalid exploration model.", options.path);
+            defer model.deinit();
+            const report = core.exploration.run(allocator, init.io, model.value, null) catch |err| return diagnostic(init, 5, @errorName(err), "Cannot explore model.", options.path);
+            return emit(init, report, options.out);
+        },
+        .replay => {
+            const bytes = read(init, options.path.?, config) catch |err| return diagnostic(init, 4, @errorName(err), "Cannot read replay request.", options.path);
+            const request = core.challenge.decode(core.exploration.Replay, allocator, bytes) catch |err| return diagnostic(init, 5, @errorName(err), "Invalid replay request.", options.path);
+            defer request.deinit();
+            if (request.value.replay_version != 1) return diagnostic(init, 5, "InvalidReplayVersion", "Unsupported replay version.", options.path);
+            const report = core.exploration.run(allocator, init.io, request.value.model, request.value.trace) catch |err| return diagnostic(init, 5, @errorName(err), "Cannot replay trace.", options.path);
+            return emit(init, report, options.out);
         },
         .analyze => {
             const bytes = read(init, options.path.?, config) catch |err| return diagnostic(init, 4, @errorName(err), "Cannot read snapshot.", options.path);

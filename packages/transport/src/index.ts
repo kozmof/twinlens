@@ -282,3 +282,4 @@ export { encodeSnapshot, validateSnapshot } from "./snapshot.js";
 export type { Snapshot, FileDigest, CompilerDiagnostic } from "./snapshot.js";
 
 export * from "./specification.js";
+export type * from "./exploration.js";

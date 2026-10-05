@@ -11,17 +11,18 @@
     "typecheck": "tsc -b --force",
     "test": "pnpm build && zig build test && vitest run",
     "test:ts": "pnpm build:ts && vitest run tests/transport.test.ts tests/boundaries.test.ts tests/scanner.test.ts",
-    "test:integration": "pnpm build && vitest run tests/cli.test.ts tests/phase1-cli.test.ts tests/phase2-cli.test.ts tests/phase3-cli.test.ts tests/phase4-cli.test.ts",
+    "test:integration": "pnpm build && vitest run tests/cli.test.ts tests/phase1-cli.test.ts tests/phase2-cli.test.ts tests/phase3-cli.test.ts tests/phase4-cli.test.ts tests/phase5-cli.test.ts",
     "check": "pnpm fmt:check && pnpm lint && pnpm typecheck && pnpm test",
     "fixture": "pnpm build:ts && node scripts/generate-fixture.mjs",
-    "lint": "oxlint packages tests scripts",
-    "lint:fix": "oxlint --fix packages tests scripts",
+    "lint": "oxlint --threads=2 packages tests scripts",
+    "lint:fix": "oxlint --threads=2 --fix packages tests scripts",
     "fmt": "node scripts/format.mjs && zig fmt build.zig src",
     "fmt:check": "node scripts/format.mjs --check && zig fmt --check build.zig src",
     "self:observe": "pnpm build && node scripts/self-observe.mjs",
     "self:observe:all": "pnpm build && node scripts/self-observe.mjs --all",
     "self:analyze": "pnpm build && node scripts/self-analyze.mjs",
-    "self:verify": "pnpm build && node scripts/self-verify.mjs"
+    "self:verify": "pnpm build && node scripts/self-verify.mjs",
+    "self:explore": "pnpm build && node scripts/self-explore.mjs"
   },
   "devDependencies": {
     "@types/node": "26.6.3",

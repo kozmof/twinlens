@@ -572,7 +572,6 @@ pub fn scan(gpa: std.mem.Allocator, io: std.Io, input: []const u8, project: ?[]c
             return std.mem.lessThan(u8, l, r);
         }
     }.less);
-    if (paths.items.len == 0) return error.NoZigSources;
     var s: Scanner = .{ .a = a, .project = try a.dupe(u8, project orelse std.fs.path.basename(root)) };
     for (paths.items) |path| {
         if (!ir.validPath(path)) return error.InvalidSourcePath;

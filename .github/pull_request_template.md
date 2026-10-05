@@ -6,3 +6,4 @@ Describe the problem, resulting behavior, and relevant verification.
 - [ ] Any self-analysis hypothesis/change includes a before/after comparison or a documented decision not to change the code.
 - [ ] The development checklist in `docs/development.md` is complete where applicable.
 - [ ] Specification changes pass `pnpm self:verify`, including negative and incomplete-evidence cases.
+- [ ] History/exploration changes pass `pnpm self:explore`, retain replayable counterexamples, and report bounds.
