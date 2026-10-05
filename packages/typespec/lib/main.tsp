@@ -12,3 +12,5 @@ extern dec relation(target: unknown, kind: valueof string, destination: unknown)
 extern dec semantics(target: Operation, mode: valueof string, definition?: valueof string);
 extern dec derived(target: Operation, backing: Operation);
 extern dec domain(target: unknown, definition: valueof string);
+
+extern dec perspective(target: unknown, name: valueof string);

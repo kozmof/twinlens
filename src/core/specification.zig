@@ -7,7 +7,7 @@ pub const ClaimId = identity.Id("clm_");
 pub const ConstraintId = identity.Id("con_");
 pub const Scalar = struct { kind: enum { null, boolean, number, string }, value: []const u8 };
 pub const Expression = struct {
-    op: enum { literal, fact, eq, ne, lt, le, gt, ge, @"and", @"or", not, implies, call, graph, unsupported },
+    op: enum { literal, fact, eq, ne, lt, le, gt, ge, @"and", @"or", not, implies, call, graph, count, unsupported },
     args: []const u32,
     name: ?[]const u8,
     value: ?Scalar,
@@ -54,14 +54,14 @@ pub fn claimId(a: std.mem.Allocator, c: Claim) !ClaimId {
 pub fn constraintId(a: std.mem.Allocator, c: Constraint) !ConstraintId {
     return identity.make(a, ConstraintId, "con_", &.{ "constraint", c.subject.bytes, c.name });
 }
-fn expressions(rows: []const Expression, allow_empty: bool) !void {
+pub fn validateExpressions(rows: []const Expression, allow_empty: bool) !void {
     if ((!allow_empty and rows.len == 0) or rows.len > 1024) return error.InvalidExpression;
     for (rows, 0..) |e, i| {
         for (e.args) |arg| if (arg >= i) return error.InvalidExpressionReference;
         const arity: usize = switch (e.op) {
             .literal, .fact, .graph, .unsupported => 0,
             .not => 1,
-            .call => e.args.len,
+            .call, .count => e.args.len,
             else => 2,
         };
         if (e.args.len != arity or e.args.len > 64) return error.InvalidExpression;
@@ -94,7 +94,7 @@ pub fn validate(gpa: std.mem.Allocator, s: Specification) !void {
     for (s.constraints) |c| {
         try insert(a, &ids, c.id.bytes);
         try source(c.source);
-        try expressions(c.expression, false);
+        try validateExpressions(c.expression, false);
         if (!subjects.contains(c.subject.bytes) or !ir.nonempty(c.name) or !eq(c.id.bytes, (try constraintId(a, c)).bytes)) return error.InvalidConstraint;
         try constraints.put(a, c.id.bytes, c.subject);
     }
@@ -112,7 +112,7 @@ pub fn validate(gpa: std.mem.Allocator, s: Specification) !void {
     for (s.functions) |f| {
         if (!subjects.contains(f.subject.bytes) or !ir.nonempty(f.name) or f.arity > 64) return error.InvalidFunction;
         try insert(a, &names, f.name);
-        try expressions(f.definition, true);
+        try validateExpressions(f.definition, true);
         if (f.backing) |id| if (!subjects.contains(id.bytes)) return error.DanglingReference;
     }
     var domains: std.StringHashMapUnmanaged(void) = .empty;
@@ -297,6 +297,16 @@ const Evaluator = struct {
                         };
                     };
                     break :blk unknown("Required fact is absent");
+                },
+                .count => blk: {
+                    var total: u32 = 0;
+                    for (e.args) |argument| {
+                        const operand = values[argument];
+                        if (truth(operand)) |present| {
+                            if (present) total += 1;
+                        } else break :blk if (operand.status != .known) operand else unsupported("Cardinality requires boolean predicates");
+                    }
+                    break :blk .{ .status = .known, .value = .{ .kind = .number, .value = try std.fmt.allocPrint(self.a, "{d}", .{total}) }, .reason = "Counted explicitly supplied predicates" };
                 },
                 .call => blk: {
                     for (self.spec.functions) |f| if (eq(f.name, e.name.?)) {

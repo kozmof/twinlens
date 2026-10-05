@@ -2,7 +2,7 @@
 
 Twinlens combines Specification Analysis (SA) with Behavioral Telemetry (BT) to expose hidden assumptions through evidence from specifications and code.
 
-Phase 5 adds challenges, simultaneous response judgments, bounded Store history exploration, and counterexample replay. TypeSpec specifications provide explicit claims and constraints for direct evaluation and structural verification. Existing capabilities provide TypeScript and Zig telemetry, potential dataflow relationships, source-linked evidence, reviewable responsibility hypotheses, and caller significance. Twinlens can analyze both language domains and compare revisions. Solver-backed verification and general runtime exploration remain later phases.
+Phase 6 adds Z3-backed symbolic queries, explicit SA-to-BT mappings, policy-aware cross-perspective findings, and a complete finding-to-correction workflow. Challenges, simultaneous response judgments, bounded Store history exploration, and counterexample replay provide executable evidence. TypeSpec specifications provide explicit claims and constraints for direct evaluation and structural verification. Existing capabilities provide TypeScript and Zig telemetry, potential dataflow relationships, source-linked evidence, reviewable responsibility hypotheses, and caller significance. Twinlens can analyze both language domains and compare revisions. Symbolic witnesses and bounded simulations remain distinct from observed implementation behavior; general runtime instrumentation remains later work.
 
 ## Toolchain
 
@@ -68,7 +68,7 @@ zig build run -- --help
 ./zig-out/bin/twinlens --config twinlens.example.json import fixtures/seed-v1.json
 ```
 
-Configuration is loaded only when `--config FILE` precedes the command. Its `max_input_bytes` defaults to 16 MiB and must be between 1 byte and 256 MiB. The optional `typescript_adapter` setting locates the built adapter (default: `packages/typescript/dist/cli.js`). The optional `typespec_adapter` defaults to `packages/typespec/dist/cli.js`. Configuration files are limited to 64 KiB. File paths are interpreted relative to the working directory. Transport source paths use a separate project-relative convention described in [IR v1](docs/ir-v1.md).
+Configuration is loaded only when `--config FILE` precedes the command. Its `max_input_bytes` defaults to 16 MiB and must be between 1 byte and 256 MiB. The optional `typescript_adapter` setting locates the built adapter (default: `packages/typescript/dist/cli.js`). The optional `typespec_adapter` defaults to `packages/typespec/dist/cli.js`. The optional `solver_adapter` defaults to `packages/solver/dist/cli.js`. Configuration files are limited to 64 KiB. File paths are interpreted relative to the working directory. Transport source paths use a separate project-relative convention described in [IR v1](docs/ir-v1.md).
 
 ## CLI contract
 
@@ -88,6 +88,9 @@ Configuration is loaded only when `--config FILE` precedes the command. Its `max
 | `judge SPECIFICATION REQUEST [--out FILE]`                                       | Policy-aware simultaneous response judgments                               |
 | `explore MODEL [--out FILE]`                                                     | Bounded histories, coverage, and counterexamples                           |
 | `replay REQUEST [--out FILE]`                                                    | Replayed transition evidence and judgments                                 |
+| `solve QUERY [--out FILE]`                                                       | Symbolic outcome, model, concrete witness, and optional replay             |
+| `cross INPUT [--previous REPORT] [--out FILE]`                                   | Combined policy, mapping, evidence, challenge, and verification report     |
+| `cross-diff BEFORE AFTER [--out FILE]`                                           | Cross-lens revision history and semantic differences                       |
 | `--help`, `--version`                                                            | Human-readable text                                                        |
 
 Failures emit one JSON object to stderr with `code`, `message`, and `path` (nullable), and no successful result on stdout. Query with no matches succeeds with an empty list. A missing observation is not interpreted as a zero or as a failed measurement.
@@ -105,19 +108,22 @@ Failures emit one JSON object to stderr with `code`, `message`, and `path` (null
 
 Zig defines Twinlens semantics. TypeScript provides permanent compiler ecosystem integration. Both frontends exchange language-independent records with the core; compiler AST objects cannot cross the transport boundary.
 
-| Location                | Responsibility                                                                                                                                                                     |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/core/`             | Typed IDs, IR/snapshot validation, indexed store, queries, file replacement, diff, evidence, findings, significance, constraint evaluation, response oracles, and finite histories |
-| `src/main.zig`          | CLI, config, adapter orchestration, I/O, diagnostics                                                                                                                               |
-| `src/adapters/`         | Zig AST extraction and static telemetry, separate from the semantic core                                                                                                           |
-| `packages/transport/`   | TypeScript IR/snapshot types, identity encoding, structural validation, JSON encoding                                                                                              |
-| `packages/typescript/`  | Compiler project loading, source extraction, static sensors, snapshot production                                                                                                   |
-| `packages/typespec/`    | TypeSpec compiler integration, decorators, and specification lowering                                                                                                              |
-| `fixtures/`, `scripts/` | Reproducible synthetic seed document and invalid-case generators                                                                                                                   |
-| `tests/`                | Transport conformance, integration, and dependency-boundary checks                                                                                                                 |
+| Location                | Responsibility                                                                                                                                                                                                          |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/core/`             | Typed IDs, IR/snapshot validation, indexed store, queries, file replacement, diff, evidence, findings, significance, constraint evaluation, response oracles, finite histories, symbolic encoding, and cross-lens rules |
+| `src/main.zig`          | CLI, config, adapter orchestration, I/O, diagnostics                                                                                                                                                                    |
+| `src/adapters/`         | Zig AST extraction and static telemetry, separate from the semantic core                                                                                                                                                |
+| `packages/transport/`   | TypeScript IR/snapshot types, identity encoding, structural validation, JSON encoding                                                                                                                                   |
+| `packages/typescript/`  | Compiler project loading, source extraction, static sensors, snapshot production                                                                                                                                        |
+| `packages/typespec/`    | TypeSpec compiler integration, decorators, and specification lowering                                                                                                                                                   |
+| `packages/solver/`      | Official Z3 WASM execution and model transport; core supplies all assertions                                                                                                                                            |
+| `fixtures/`, `scripts/` | Reproducible synthetic seed document and invalid-case generators                                                                                                                                                        |
+| `tests/`                | Transport conformance, integration, and dependency-boundary checks                                                                                                                                                      |
 
 The transport package depends on neither frontend. Frontends depend only on transport for shared records. The Zig core imports only its own modules and the standard library. The core owns indexed validated records; snapshots persist as explicit JSON files. Partial file replacement invalidates dependent aggregates. Phase 5 checks finite Store histories through conservative refresh; minimal dependency-based incremental scanning and general historical domain policies remain later work.
 
 See [IR v1](docs/ir-v1.md) for the wire contract and identity rules. Project planning documents and the working checklist currently live in the locally ignored `tmp/` directory.
 
 Development uses a [self-application checklist](docs/development.md) for substantial new analysis capabilities.
+
+See [Phase 6](docs/phase6.md) for solver limits, policy rules, mappings, and report contracts. Run `TMPDIR=/tmp pnpm self:cross` for the full cross-lens self-application gate.

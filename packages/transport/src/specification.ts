@@ -18,6 +18,7 @@ export type Expression = {
     | "implies"
     | "call"
     | "graph"
+    | "count"
     | "unsupported";
   args: number[];
   name: string | null;
@@ -133,6 +134,15 @@ export function expression(value: unknown): Expression[] {
           name: argument[0],
           value: null,
           args: argument.slice(1).map((operand) => visit(operand, depth + 1)),
+        };
+      } else if (operator === "count") {
+        if (!Array.isArray(argument) || argument.length > 64)
+          throw new Error("Cardinality requires at most 64 predicates");
+        node = {
+          op: "count",
+          name: null,
+          value: null,
+          args: argument.map((operand) => visit(operand, depth + 1)),
         };
       } else {
         const arity =

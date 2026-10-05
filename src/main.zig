@@ -20,6 +20,9 @@ const help =
     \\                                      Lower TypeSpec to specification IR
     \\  evaluate SPECIFICATION EVIDENCE [--out FILE]
     \\                                      Evaluate claims without executing user code
+    \\  cross INPUT [--previous REPORT] [--out FILE]  Combine specification and code evidence
+    \\  cross-diff BEFORE AFTER [--out FILE]  Compare combined revision history
+    \\  solve QUERY [--out FILE]             Solve a bounded symbolic constraint query
     \\  challenges SPECIFICATION [--out FILE] Generate suspicious-case questions
     \\  judge SPECIFICATION REQUEST [--out FILE] Judge a simultaneous response set
     \\  explore MODEL [--out FILE]           Explore bounded Store histories
@@ -30,7 +33,7 @@ const help =
     \\                                      Record a finding review decision
     \\  --help                              Show this help
     \\  --version                           Show version
-    \\Config: max_input_bytes (16 MiB), typescript_adapter, typespec_adapter (built package CLI paths).
+    \\Config: max_input_bytes (16 MiB), typescript_adapter, typespec_adapter, solver_adapter (built package CLI paths).
     \\Paths are relative to cwd. Query/update source paths are project-relative.
     \\Exit: 0 success, 1 internal, 2 usage/config, 3 unsupported, 4 I/O/adapter, 5 invalid IR.
     \\
@@ -39,9 +42,10 @@ const Config = struct {
     max_input_bytes: u32 = 16 * 1024 * 1024,
     typescript_adapter: []const u8 = "packages/typescript/dist/cli.js",
     typespec_adapter: []const u8 = "packages/typespec/dist/cli.js",
+    solver_adapter: []const u8 = "packages/solver/dist/cli.js",
 };
 const Options = struct {
-    command: enum { help, version, import, query, scan, diff, update, analyze, review, compile, evaluate, inspect, challenges, judge, explore, replay },
+    command: enum { help, version, import, query, scan, diff, update, analyze, review, compile, evaluate, inspect, challenges, judge, explore, replay, solve, cross, @"cross-diff" },
     path: ?[]const u8 = null,
     second: ?[]const u8 = null,
     config: ?[]const u8 = null,
@@ -79,7 +83,7 @@ fn parseArgs(args: []const []const u8) !Options {
     if (i == args.len or std.mem.startsWith(u8, args[i], "--")) return error.ExpectedInputPath;
     options.path = args[i];
     i += 1;
-    if (command == .diff or command == .update or command == .evaluate or command == .inspect or command == .judge) {
+    if (command == .diff or command == .update or command == .evaluate or command == .inspect or command == .judge or command == .@"cross-diff") {
         if (i == args.len or std.mem.startsWith(u8, args[i], "--")) return error.ExpectedSecondPath;
         options.second = args[i];
         i += 1;
@@ -95,7 +99,7 @@ fn parseArgs(args: []const []const u8) !Options {
         const value = args[i];
         i += 1;
         if (!core.ir.nonempty(value)) return error.EmptyOptionValue;
-        if ((command == .scan or command == .diff or command == .update or command == .analyze or command == .review or command == .compile or command == .evaluate or command == .inspect or command == .challenges or command == .judge or command == .explore or command == .replay) and std.mem.eql(u8, option, "--out") and options.out == null) {
+        if ((command == .scan or command == .diff or command == .update or command == .analyze or command == .review or command == .compile or command == .evaluate or command == .inspect or command == .challenges or command == .judge or command == .explore or command == .replay or command == .solve or command == .cross or command == .@"cross-diff") and std.mem.eql(u8, option, "--out") and options.out == null) {
             options.out = value;
             continue;
         }
@@ -116,7 +120,7 @@ fn parseArgs(args: []const []const u8) !Options {
             options.filter.revision = value;
             continue;
         }
-        if (command == .analyze and std.mem.eql(u8, option, "--previous") and options.previous == null) {
+        if ((command == .analyze or command == .cross) and std.mem.eql(u8, option, "--previous") and options.previous == null) {
             options.previous = value;
             continue;
         }
@@ -198,10 +202,10 @@ fn run(init: std.process.Init) !u8 {
         if (shape.value == .object) if (shape.value.object.get("max_input_bytes")) |limit| {
             if (limit != .integer and limit != .float) return diagnostic(init, 2, "InvalidInputLimit", "max_input_bytes must be a JSON number.", path);
         };
-        const parsed = std.json.parseFromSlice(Config, allocator, bytes, .{ .allocate = .alloc_always }) catch |err| return diagnostic(init, 2, @errorName(err), "Invalid config; expected max_input_bytes, typescript_adapter, or typespec_adapter.", path);
+        const parsed = std.json.parseFromSlice(Config, allocator, bytes, .{ .allocate = .alloc_always }) catch |err| return diagnostic(init, 2, @errorName(err), "Invalid config; expected max_input_bytes, typescript_adapter, typespec_adapter, or solver_adapter.", path);
         // Config strings live in the process arena through command execution.
         config = parsed.value;
-        if (config.max_input_bytes == 0 or config.max_input_bytes > 256 * 1024 * 1024 or !core.ir.nonempty(config.typescript_adapter) or !core.ir.nonempty(config.typespec_adapter)) return diagnostic(init, 2, "InvalidConfig", "max_input_bytes must be 1..268435456 and adapter paths must be nonempty.", path);
+        if (config.max_input_bytes == 0 or config.max_input_bytes > 256 * 1024 * 1024 or !core.ir.nonempty(config.typescript_adapter) or !core.ir.nonempty(config.typespec_adapter) or !core.ir.nonempty(config.solver_adapter)) return diagnostic(init, 2, "InvalidConfig", "max_input_bytes must be 1..268435456 and adapter paths must be nonempty.", path);
     }
     switch (options.command) {
         .help => try std.Io.File.stdout().writeStreamingAll(init.io, help),
@@ -258,6 +262,47 @@ fn run(init: std.process.Init) !u8 {
             var result = core.specification.evaluate(allocator, spec.value, input.value) catch |err| return diagnostic(init, 5, @errorName(err), "Cannot evaluate specification.", options.path);
             defer result.deinit();
             return emit(init, result.report, options.out);
+        },
+        .cross => {
+            const bytes = read(init, options.path.?, config) catch |err| return diagnostic(init, 4, @errorName(err), "Cannot read cross-lens input.", options.path);
+            const input = core.challenge.decode(core.crosslens.Input, allocator, bytes) catch |err| return diagnostic(init, 5, @errorName(err), "Invalid cross-lens input.", options.path);
+            defer input.deinit();
+            var previous: ?std.json.Parsed(core.crosslens.Report) = null;
+            defer if (previous) |report| report.deinit();
+            if (options.previous) |path| {
+                const previous_bytes = read(init, path, config) catch |err| return diagnostic(init, 4, @errorName(err), "Cannot read previous cross-lens report.", path);
+                previous = core.challenge.decode(core.crosslens.Report, allocator, previous_bytes) catch |err| return diagnostic(init, 5, @errorName(err), "Invalid previous cross-lens report.", path);
+            }
+            const report = core.crosslens.analyze(allocator, init.io, input.value, if (previous) |value| value.value else null) catch |err| return diagnostic(init, 5, @errorName(err), "Cannot analyze cross-lens input.", options.path);
+            return emit(init, report, options.out);
+        },
+        .@"cross-diff" => {
+            const before_bytes = read(init, options.path.?, config) catch |err| return diagnostic(init, 4, @errorName(err), "Cannot read previous cross-lens report.", options.path);
+            const after_bytes = read(init, options.second.?, config) catch |err| return diagnostic(init, 4, @errorName(err), "Cannot read current cross-lens report.", options.second);
+            const before = core.challenge.decode(core.crosslens.Report, allocator, before_bytes) catch |err| return diagnostic(init, 5, @errorName(err), "Invalid previous cross-lens report.", options.path);
+            defer before.deinit();
+            const after = core.challenge.decode(core.crosslens.Report, allocator, after_bytes) catch |err| return diagnostic(init, 5, @errorName(err), "Invalid current cross-lens report.", options.second);
+            defer after.deinit();
+            const report = core.crosslens.diff(allocator, before.value, after.value) catch |err| return diagnostic(init, 5, @errorName(err), "Cannot compare cross-lens history.", options.path);
+            return emit(init, report, options.out);
+        },
+        .solve => {
+            const bytes = read(init, options.path.?, config) catch |err| return diagnostic(init, 4, @errorName(err), "Cannot read symbolic query.", options.path);
+            const query = core.challenge.decode(core.symbolic.Query, allocator, bytes) catch |err| return diagnostic(init, 5, @errorName(err), "Invalid symbolic query.", options.path);
+            defer query.deinit();
+            var encoding = core.symbolic.encode(allocator, query.value) catch |err| return diagnostic(init, 5, @errorName(err), "Cannot encode symbolic query.", options.path);
+            var backend: ?std.json.Parsed(core.symbolic.BackendResult) = null;
+            defer if (backend) |result| result.deinit();
+            if (encoding.packet) |packet| {
+                const packet_bytes = try std.json.Stringify.valueAlloc(allocator, packet, .{});
+                if (packet_bytes.len > 60000) encoding = .{ .packet = null, .reason = "UnsupportedEncodingSize" } else {
+                    const result = std.process.run(allocator, init.io, .{ .argv = &.{ "node", config.solver_adapter, packet_bytes }, .expand_arg0 = .expand, .stdout_limit = .limited(config.max_input_bytes), .stderr_limit = .limited(64 * 1024) }) catch |err| return diagnostic(init, 4, @errorName(err), "Cannot run Z3 adapter.", options.path);
+                    if (result.term != .exited or result.term.exited != 0) return diagnostic(init, 4, "SolverAdapterFailed", if (result.stderr.len > 0) result.stderr else "Z3 adapter failed.", options.path);
+                    backend = core.challenge.decode(core.symbolic.BackendResult, allocator, result.stdout) catch |err| return diagnostic(init, 5, @errorName(err), "Invalid solver response.", options.path);
+                }
+            }
+            const report = core.symbolic.finish(allocator, init.io, query.value, encoding, if (backend) |result| result.value else null) catch |err| return diagnostic(init, 5, @errorName(err), "Cannot interpret symbolic result.", options.path);
+            return emit(init, report, options.out);
         },
         .challenges => {
             const bytes = read(init, options.path.?, config) catch |err| return diagnostic(init, 4, @errorName(err), "Cannot read specification.", options.path);

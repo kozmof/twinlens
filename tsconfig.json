@@ -1,8 +1,17 @@
 {
   "files": [],
   "references": [
-    { "path": "packages/transport" },
-    { "path": "packages/typescript" },
-    { "path": "packages/typespec" }
+    {
+      "path": "packages/transport"
+    },
+    {
+      "path": "packages/typescript"
+    },
+    {
+      "path": "packages/typespec"
+    },
+    {
+      "path": "packages/solver"
+    }
   ]
 }

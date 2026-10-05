@@ -11,7 +11,7 @@ it("keeps both frontend package entry points compatible with the shared transpor
   }
 });
 it("keeps package dependencies directed toward transport", () => {
-  for (const name of ["transport", "typescript", "typespec"]) {
+  for (const name of ["transport", "typescript", "typespec", "solver"]) {
     const pkg = JSON.parse(readFileSync(`packages/${name}/package.json`, "utf8"));
     const internal = Object.keys(pkg.dependencies ?? {}).filter((key) =>
       key.startsWith("@twinlens/"),

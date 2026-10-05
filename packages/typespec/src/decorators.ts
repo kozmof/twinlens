@@ -149,6 +149,21 @@ export function $relation(
         "authorizes",
         "owns",
         "derived_from",
+        "verifies",
+        "depends_on",
+        "produces",
+        "consumes",
+        "reserves",
+        "old_value_policy",
+        "old_identity_policy",
+        "uniqueness",
+        "consequence_policy",
+        "provenance",
+        "trust",
+        "verification",
+        "consumption_policy",
+        "sharing_policy",
+        "release_policy",
       ].includes(kind)
     )
       throw Error("relation");
@@ -205,6 +220,13 @@ export function $domain(context: DecoratorContext, target: Type, definition: str
     annotation.domain = { ownership, nullability, values: values.map(scalar) };
   });
 }
+export function $perspective(context: DecoratorContext, target: Type, name: string) {
+  annotate(context, target, (annotation) => {
+    if (!["owned", "credential", "identity", "derived", "generated", "resource"].includes(name))
+      throw Error("perspective");
+    annotation.relations.push({ kind: "perspective." + name, target });
+  });
+}
 setTypeSpecNamespace(
   "Twinlens",
   $claim,
@@ -218,4 +240,5 @@ setTypeSpecNamespace(
   $semantics,
   $derived,
   $domain,
+  $perspective,
 );

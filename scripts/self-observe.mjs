@@ -55,7 +55,7 @@ try {
     filter: (path) => !path.split(sep).includes("node_modules"),
   });
   symlinkSync(join(root, "node_modules"), join(scratch, "node_modules"), "dir");
-  for (const name of ["transport", "typescript", "typespec"]) {
+  for (const name of ["transport", "typescript", "typespec", "solver"]) {
     const modules = join(root, "packages", name, "node_modules");
     if (existsSync(modules))
       symlinkSync(modules, join(scratch, "packages", name, "node_modules"), "dir");
