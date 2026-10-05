@@ -9,6 +9,7 @@ Each substantial new analysis capability must be applied to Twinlens before its 
 - Run `pnpm self:verify` for specification, evaluator, or structural-inspector changes. Check selected invariants, deliberate violations, missing evidence, and unsupported semantics.
 - Run `pnpm self:explore` for challenge, response-oracle, Store history, or exploration changes. Replay an intentional stale-record fault and verify the corrected adapter against the same trace; report all bounds and incomplete coverage.
 - Run `pnpm self:cross` for solver, mapping, or cross-perspective changes. Verify the complete finding-to-correction loop, explicit policy levels, review retention, and separate symbolic, simulated, and observed outcomes.
+- Run `pnpm self:auth` for authentication simulation/profile changes. Check weak/strong specifications, reproduced and corrected histories, rejected-action atomicity, explicit session policy, and finite coverage.
 - Inspect source-linked evidence on a named Twinlens subsystem. Use the scanner for argument telemetry, IR processing for property telemetry, query/analysis for branches, normalization for dataflow, and sensor architecture for caller significance.
 - Record a hypothesis with its supporting observations/relations and known gaps. Do not infer a defect from a count alone.
 - Test a justified implementation/model change or document why the hypothesis should not prompt a change. Preserve any review decision rather than silently clearing it.

@@ -4,6 +4,8 @@ Twinlens combines Specification Analysis (SA) with Behavioral Telemetry (BT) to 
 
 Phase 6 adds Z3-backed symbolic queries, explicit SA-to-BT mappings, policy-aware cross-perspective findings, and a complete finding-to-correction workflow. Challenges, simultaneous response judgments, bounded Store history exploration, and counterexample replay provide executable evidence. TypeSpec specifications provide explicit claims and constraints for direct evaluation and structural verification. Existing capabilities provide TypeScript and Zig telemetry, potential dataflow relationships, source-linked evidence, reviewable responsibility hypotheses, and caller significance. Twinlens can analyze both language domains and compare revisions. Symbolic witnesses and bounded simulations remain distinct from observed implementation behavior; general runtime instrumentation remains later work.
 
+Phase 7’s [authentication demonstration](docs/authentication-demo.md) exercises nine operations with explicit policy profiles and replayable synthetic histories. Run `pnpm self:auth` to compare weak specifications, deliberate simulated violations, and policy-enforced behavior.
+
 ## Toolchain
 
 | Tool       | Supported baseline             |
@@ -91,6 +93,8 @@ Configuration is loaded only when `--config FILE` precedes the command. Its `max
 | `solve QUERY [--out FILE]`                                                       | Symbolic outcome, model, concrete witness, and optional replay             |
 | `cross INPUT [--previous REPORT] [--out FILE]`                                   | Combined policy, mapping, evidence, challenge, and verification report     |
 | `cross-diff BEFORE AFTER [--out FILE]`                                           | Cross-lens revision history and semantic differences                       |
+| `auth MODEL [--out FILE]`                                                        | Bounded synthetic authentication histories and policy-aware judgments      |
+| `auth-replay REQUEST [--out FILE]`                                               | Validated authentication trace replay                                      |
 | `--help`, `--version`                                                            | Human-readable text                                                        |
 
 Failures emit one JSON object to stderr with `code`, `message`, and `path` (nullable), and no successful result on stdout. Query with no matches succeeds with an empty list. A missing observation is not interpreted as a zero or as a failed measurement.

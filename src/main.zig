@@ -20,6 +20,8 @@ const help =
     \\                                      Lower TypeSpec to specification IR
     \\  evaluate SPECIFICATION EVIDENCE [--out FILE]
     \\                                      Evaluate claims without executing user code
+    \\  auth MODEL [--out FILE]              Run bounded synthetic authentication histories
+    \\  auth-replay REQUEST [--out FILE]     Replay a synthetic authentication trace
     \\  cross INPUT [--previous REPORT] [--out FILE]  Combine specification and code evidence
     \\  cross-diff BEFORE AFTER [--out FILE]  Compare combined revision history
     \\  solve QUERY [--out FILE]             Solve a bounded symbolic constraint query
@@ -45,7 +47,7 @@ const Config = struct {
     solver_adapter: []const u8 = "packages/solver/dist/cli.js",
 };
 const Options = struct {
-    command: enum { help, version, import, query, scan, diff, update, analyze, review, compile, evaluate, inspect, challenges, judge, explore, replay, solve, cross, @"cross-diff" },
+    command: enum { help, version, import, query, scan, diff, update, analyze, review, compile, evaluate, inspect, challenges, judge, explore, replay, solve, cross, @"cross-diff", auth, @"auth-replay" },
     path: ?[]const u8 = null,
     second: ?[]const u8 = null,
     config: ?[]const u8 = null,
@@ -99,7 +101,7 @@ fn parseArgs(args: []const []const u8) !Options {
         const value = args[i];
         i += 1;
         if (!core.ir.nonempty(value)) return error.EmptyOptionValue;
-        if ((command == .scan or command == .diff or command == .update or command == .analyze or command == .review or command == .compile or command == .evaluate or command == .inspect or command == .challenges or command == .judge or command == .explore or command == .replay or command == .solve or command == .cross or command == .@"cross-diff") and std.mem.eql(u8, option, "--out") and options.out == null) {
+        if ((command == .scan or command == .diff or command == .update or command == .analyze or command == .review or command == .compile or command == .evaluate or command == .inspect or command == .challenges or command == .judge or command == .explore or command == .replay or command == .auth or command == .@"auth-replay" or command == .solve or command == .cross or command == .@"cross-diff") and std.mem.eql(u8, option, "--out") and options.out == null) {
             options.out = value;
             continue;
         }
@@ -262,6 +264,21 @@ fn run(init: std.process.Init) !u8 {
             var result = core.specification.evaluate(allocator, spec.value, input.value) catch |err| return diagnostic(init, 5, @errorName(err), "Cannot evaluate specification.", options.path);
             defer result.deinit();
             return emit(init, result.report, options.out);
+        },
+        .auth => {
+            const bytes = read(init, options.path.?, config) catch |err| return diagnostic(init, 4, @errorName(err), "Cannot read authentication model.", options.path);
+            const model = core.challenge.decode(core.authentication.Model, allocator, bytes) catch |err| return diagnostic(init, 5, @errorName(err), "Invalid authentication model.", options.path);
+            defer model.deinit();
+            const report = core.authentication.run(allocator, init.io, model.value, null) catch |err| return diagnostic(init, 5, @errorName(err), "Cannot run authentication model.", options.path);
+            return emit(init, report, options.out);
+        },
+        .@"auth-replay" => {
+            const bytes = read(init, options.path.?, config) catch |err| return diagnostic(init, 4, @errorName(err), "Cannot read authentication replay.", options.path);
+            const request = core.challenge.decode(core.authentication.Replay, allocator, bytes) catch |err| return diagnostic(init, 5, @errorName(err), "Invalid authentication replay.", options.path);
+            defer request.deinit();
+            if (request.value.authentication_replay_version != 1) return diagnostic(init, 5, "UnsupportedAuthenticationReplay", "Unsupported authentication replay version.", options.path);
+            const report = core.authentication.run(allocator, init.io, request.value.model, request.value.trace) catch |err| return diagnostic(init, 5, @errorName(err), "Cannot replay authentication history.", options.path);
+            return emit(init, report, options.out);
         },
         .cross => {
             const bytes = read(init, options.path.?, config) catch |err| return diagnostic(init, 4, @errorName(err), "Cannot read cross-lens input.", options.path);

@@ -29,3 +29,4 @@ jobs:
       - run: pnpm self:verify
       - run: pnpm self:explore
       - run: pnpm self:cross
+      - run: pnpm self:auth

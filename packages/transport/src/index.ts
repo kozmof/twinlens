@@ -285,3 +285,4 @@ export * from "./specification.js";
 export type * from "./exploration.js";
 export type * from "./symbolic.js";
 export type * from "./crosslens.js";
+export type * from "./authentication.js";

@@ -1,0 +1,81 @@
+{
+  "name": "synthetic-strict",
+  "policies": [
+    {
+      "rule": "inputs_present",
+      "level": "required",
+      "reason": "Explicit requirement of this synthetic demonstration"
+    },
+    {
+      "rule": "credential_binding",
+      "level": "required",
+      "reason": "Explicit requirement of this synthetic demonstration"
+    },
+    {
+      "rule": "current_credential",
+      "level": "required",
+      "reason": "Explicit requirement of this synthetic demonstration"
+    },
+    {
+      "rule": "authority",
+      "level": "required",
+      "reason": "Explicit requirement of this synthetic demonstration"
+    },
+    {
+      "rule": "unique_identity",
+      "level": "required",
+      "reason": "Explicit requirement of this synthetic demonstration"
+    },
+    {
+      "rule": "exclusive_credential",
+      "level": "required",
+      "reason": "Explicit requirement of this synthetic demonstration"
+    },
+    {
+      "rule": "token_expiry",
+      "level": "required",
+      "reason": "Explicit requirement of this synthetic demonstration"
+    },
+    {
+      "rule": "token_single_use",
+      "level": "required",
+      "reason": "Explicit requirement of this synthetic demonstration"
+    },
+    {
+      "rule": "account_active",
+      "level": "required",
+      "reason": "Explicit requirement of this synthetic demonstration"
+    },
+    {
+      "rule": "identity_verified",
+      "level": "required",
+      "reason": "Explicit requirement of this synthetic demonstration"
+    },
+    {
+      "rule": "identity_current",
+      "level": "required",
+      "reason": "Explicit requirement of this synthetic demonstration"
+    },
+    {
+      "rule": "session_ownership",
+      "level": "required",
+      "reason": "Explicit requirement of this synthetic demonstration"
+    },
+    {
+      "rule": "old_credential_revoked",
+      "level": "required",
+      "reason": "Explicit requirement of this synthetic demonstration"
+    },
+    {
+      "rule": "session_invalidation",
+      "level": "required",
+      "reason": "This selected profile revokes sessions when credentials change"
+    },
+    {
+      "rule": "rejection_atomic",
+      "level": "required",
+      "reason": "Explicit requirement of this synthetic demonstration"
+    }
+  ],
+  "sessions_after_change": "revoke"
+}

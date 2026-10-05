@@ -11,7 +11,7 @@
     "typecheck": "tsc -b --force",
     "test": "pnpm build && zig build test && vitest run",
     "test:ts": "pnpm build:ts && vitest run tests/transport.test.ts tests/boundaries.test.ts tests/scanner.test.ts",
-    "test:integration": "pnpm build && vitest run tests/cli.test.ts tests/phase1-cli.test.ts tests/phase2-cli.test.ts tests/phase3-cli.test.ts tests/phase4-cli.test.ts tests/phase5-cli.test.ts tests/phase6-cli.test.ts",
+    "test:integration": "pnpm build && vitest run tests/cli.test.ts tests/phase1-cli.test.ts tests/phase2-cli.test.ts tests/phase3-cli.test.ts tests/phase4-cli.test.ts tests/phase5-cli.test.ts tests/phase6-cli.test.ts tests/authentication-cli.test.ts",
     "check": "pnpm fmt:check && pnpm lint && pnpm typecheck && pnpm test",
     "fixture": "pnpm build:ts && node scripts/generate-fixture.mjs",
     "lint": "oxlint --threads=2 packages tests scripts",
@@ -23,7 +23,8 @@
     "self:analyze": "pnpm build && node scripts/self-analyze.mjs",
     "self:verify": "pnpm build && node scripts/self-verify.mjs",
     "self:explore": "pnpm build && node scripts/self-explore.mjs",
-    "self:cross": "pnpm build && node scripts/self-cross.mjs"
+    "self:cross": "pnpm build && node scripts/self-cross.mjs",
+    "self:auth": "pnpm build && node scripts/self-auth.mjs"
   },
   "devDependencies": {
     "@types/node": "26.6.3",
